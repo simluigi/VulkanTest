@@ -13,6 +13,8 @@ Selecting a Physical Device
 
 #include <iostream>
 #include <vector>
+#include <map>
+#include <optional>			// C++17 and above
 #include <cstring>
 #include <stdexcept>		// reporting and propagating errors
 #include <cstdlib>			// EXIT_SUCCESS and EXIT_FAILURE
@@ -62,6 +64,16 @@ void DestroyDebugUtilsMessengerEXT(
 	}
 }
 
+struct QueueFamilyIndices
+{
+	std::optional<uint32_t> graphicsFamily;		// optional: optional contained value; value MAY or MAY NOT be present. (C++17)
+
+	bool isComplete()							// check if value exists
+	{
+		return graphicsFamily.has_value();
+	}
+};
+
 class HelloTriangleApplication 
 {	
 public:
@@ -76,9 +88,11 @@ public:
 private:
 
 	GLFWwindow*		m_Window;
-	VkInstance		m_Instance;
-
+	
+	VkInstance					m_Instance;
 	VkDebugUtilsMessengerEXT	m_DebugMessenger;
+
+	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
 	void initWindow()
 	{
@@ -93,7 +107,11 @@ private:
 	{
 		createInstance();
 		setupDebugMessenger();
+		pickPhysicalDevice();
 	}
+
+
+
 	void mainLoop()
 	{
 		while (glfwWindowShouldClose(m_Window) == false)
@@ -196,6 +214,75 @@ private:
 		{
 			throw std::runtime_error("Failed to set up debug messenger!");
 		}
+	}
+
+	void pickPhysicalDevice()
+	{
+		uint32_t deviceCount = 0;
+		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, nullptr);
+
+		if (deviceCount == 0)		// if there are 0 devices with Vulkan support, throw error and exit
+		{
+			throw std::runtime_error("Failed to find GPUs with Vulkan support!");
+		}
+
+		std::vector<VkPhysicalDevice> devices(deviceCount);		// vector to hold all VkPhysicalDevice handles
+		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, devices.data());
+
+		for (const VkPhysicalDevice device : devices)			// evaluate each physical device if suitable for the operation to perform
+		{
+			if (isDeviceSuitable(device) == true)
+			{
+				physicalDevice = device;
+				break;
+			}
+		}
+
+		if (physicalDevice == VK_NULL_HANDLE)
+		{
+			throw std::runtime_error("Failed to find a suitable GPU!");
+		}
+	}
+
+	bool isDeviceSuitable(VkPhysicalDevice device)
+	{
+		VkPhysicalDeviceProperties deviceProperties;
+		vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+		VkPhysicalDeviceFeatures deviceFeatures;					// texture compression, 64bit float, multi-viewport rendering (useful for VR)
+		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+		QueueFamilyIndices indices = findQueueFamilies(device);		// currently set to find queue family that supports VK_QUEUE_GRAPHICS_BIT
+		return indices.isComplete();
+
+		// returns true for GPUs with geometry shader support
+		// return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && deviceFeatures.geometryShader;	
+	}
+
+	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+	{
+		QueueFamilyIndices indices;
+
+		uint32_t queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);				// query number of queue families
+		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);						// generate vector of queue families based on count
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());	// assign data to queueFamilies
+
+		int i = 0;
+		for (const VkQueueFamilyProperties& queueFamily : queueFamilies)		// look for for a queue family that supports VK_QUEUE_GRAPHICS_BIT
+		{
+			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			{
+				indices.graphicsFamily = i;
+			}
+
+			if (indices.isComplete())	// if queueFamily is found, exit early
+			{
+				break;
+			}
+			i++;
+		}
+		return indices;
 	}
 
 	std::vector<const char*> getRequiredExtensions()	// returns the list of extensions based on whether validation layers are enabled or not
