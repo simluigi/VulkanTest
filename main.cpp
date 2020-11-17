@@ -94,7 +94,6 @@ private:
 	VkDebugUtilsMessengerEXT	m_DebugMessenger;
 
 	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
-
 	VkDevice m_LogicalDevice;	// logical device
 
 	VkQueue  m_GraphicsQueue;
@@ -254,17 +253,16 @@ private:
 	{
 		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);
 
-		VkDeviceQueueCreateInfo queueCreateInfo;
+		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();		// currently interested in a queue with graphics capabilities
 		queueCreateInfo.queueCount = 1;
 
-		float queuePriority = 1.0f;	// value between 0.0f Å` 1.0f to influence scheduling of command buffer.  Required even if only one queue is available.
+		float queuePriority = 1.0f;	
 		queueCreateInfo.pQueuePriorities = &queuePriority;
 
 		VkPhysicalDeviceFeatures deviceFeatures{};
 
-		// Creating the logical device itself
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
@@ -275,9 +273,6 @@ private:
 
 		createInfo.enabledExtensionCount = 0;
 
-		// Setting up device validation layers: This part is actually only for compatibility with older versions of Vulkan.
-		// Recent implementations have removed the distinction between instance and device-specific validation layers so
-		// enabledLayerCount and ppEnabledLayerNames are ignored by up-to-date implementations.
 		if (enableValidationLayers)
 		{
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
