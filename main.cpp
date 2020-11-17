@@ -1,11 +1,11 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.11.10
+Last Modified:	2020.11.15
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
-Selecting a Physical Device
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Logical_device_and_queues
+Logical device and queues
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -13,7 +13,7 @@ Selecting a Physical Device
 
 #include <iostream>
 #include <vector>
-#include <map>
+#include <map>  
 #include <optional>			// C++17 and above
 #include <cstring>
 #include <stdexcept>		// reporting and propagating errors
@@ -33,6 +33,7 @@ const std::vector<const char*> validationLayers =	// vector of Vulkan validation
 #endif
 
 
+
 // create/destroy debug functions must either be a static class function or function outside the class
 
 VkResult CreateDebugUtilsMessengerEXT(		// extension function; not automatically loaded. Need to specify address via vkGetInstanceProcedureAddr
@@ -40,7 +41,7 @@ VkResult CreateDebugUtilsMessengerEXT(		// extension function; not automatically
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 	const VkAllocationCallbacks* pAllocator,
 	VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
+{   
 	PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 	if (func != nullptr)
 	{
@@ -50,7 +51,7 @@ VkResult CreateDebugUtilsMessengerEXT(		// extension function; not automatically
 	{
 		return VK_ERROR_EXTENSION_NOT_PRESENT;
 	}
-}
+} 
 
 void DestroyDebugUtilsMessengerEXT(
 	VkInstance instance,
@@ -92,7 +93,11 @@ private:
 	VkInstance					m_Instance;
 	VkDebugUtilsMessengerEXT	m_DebugMessenger;
 
-	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
+
+	VkDevice m_LogicalDevice;	// logical device
+
+	VkQueue  m_GraphicsQueue;
 
 	void initWindow()
 	{
@@ -108,9 +113,8 @@ private:
 		createInstance();
 		setupDebugMessenger();
 		pickPhysicalDevice();
+		createLogicalDevice();
 	}
-
-
 
 	void mainLoop()
 	{
@@ -121,6 +125,8 @@ private:
 	}
 	void cleanup()
 	{
+		vkDestroyDevice(m_LogicalDevice, nullptr);
+
 		if (enableValidationLayers)
 		{
 			DestroyDebugUtilsMessengerEXT(m_Instance, m_DebugMessenger, nullptr);
@@ -233,15 +239,61 @@ private:
 		{
 			if (isDeviceSuitable(device) == true)
 			{
-				physicalDevice = device;
+				m_PhysicalDevice = device;
 				break;
 			}
 		}
 
-		if (physicalDevice == VK_NULL_HANDLE)
+		if (m_PhysicalDevice == VK_NULL_HANDLE)
 		{
 			throw std::runtime_error("Failed to find a suitable GPU!");
 		}
+	}
+
+	void createLogicalDevice()				// Preparing logical device queue
+	{
+		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);
+
+		VkDeviceQueueCreateInfo queueCreateInfo;
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();		// currently interested in a queue with graphics capabilities
+		queueCreateInfo.queueCount = 1;
+
+		float queuePriority = 1.0f;	// value between 0.0f Å` 1.0f to influence scheduling of command buffer.  Required even if only one queue is available.
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+
+		VkPhysicalDeviceFeatures deviceFeatures{};
+
+		// Creating the logical device itself
+		VkDeviceCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+		createInfo.pQueueCreateInfos = &queueCreateInfo;	// pointer to the logical device queue info (above)
+		createInfo.queueCreateInfoCount = 1;
+
+		createInfo.pEnabledFeatures = &deviceFeatures;		// currently empty (will revisit later)
+
+		createInfo.enabledExtensionCount = 0;
+
+		// Setting up device validation layers: This part is actually only for compatibility with older versions of Vulkan.
+		// Recent implementations have removed the distinction between instance and device-specific validation layers so
+		// enabledLayerCount and ppEnabledLayerNames are ignored by up-to-date implementations.
+		if (enableValidationLayers)
+		{
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+		}
+		else
+		{
+			createInfo.enabledLayerCount = 0;
+		}
+
+		if (vkCreateDevice(m_PhysicalDevice, &createInfo, nullptr, &m_LogicalDevice) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create logical device!");
+		}
+
+		vkGetDeviceQueue(m_LogicalDevice, indices.graphicsFamily.value(), 0, &m_GraphicsQueue);
 	}
 
 	bool isDeviceSuitable(VkPhysicalDevice device)
