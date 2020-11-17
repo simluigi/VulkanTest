@@ -254,7 +254,7 @@ private:
 	{
 		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);
 
-		VkDeviceQueueCreateInfo queueCreateInfo;
+		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();		// currently interested in a queue with graphics capabilities
 		queueCreateInfo.queueCount = 1;
