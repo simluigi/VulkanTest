@@ -16,6 +16,8 @@ Swap Chains
 #include <map>  
 #include <optional>			// C++17 and above
 #include <cstring>
+#include <algorithm>		// for std::min/max in chooseSwapExtent()
+#include <cstdint>			// necessary for UINT32_MAX in chooseSwapExtent()
 #include <stdexcept>		// reporting and propagating errors
 #include <cstdlib>			// EXIT_SUCCESS and EXIT_FAILURE
 #include <set>
@@ -117,6 +119,11 @@ private:
 	VkQueue	m_GraphicsQueue;
 	VkQueue	m_PresentQueue;
 
+	VkSwapchainKHR			m_SwapChain;
+	std::vector<VkImage>	m_SwapChainImages;
+	VkFormat				m_SwapChainImageFormat;
+	VkExtent2D				m_SwapChainExtent;
+
 	void initWindow()
 	{
 		glfwInit();			// initialize glfw
@@ -133,6 +140,7 @@ private:
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
+		createSwapChain();
 	}
 
 	void mainLoop()
@@ -144,6 +152,7 @@ private:
 	}
 	void cleanup()
 	{
+		vkDestroySwapchainKHR(m_LogicalDevice, m_SwapChain, nullptr);
 		vkDestroyDevice(m_LogicalDevice, nullptr);
 
 		if (enableValidationLayers)
@@ -237,7 +246,7 @@ private:
 
 		if (CreateDebugUtilsMessengerEXT(m_Instance, &createInfo, nullptr, &m_DebugMessenger) != VK_SUCCESS)	// nullptr = optional allocator callback
 		{
-			throw std::runtime_error("Failed to set up debug messenger!");
+		throw std::runtime_error("Failed to set up debug messenger!");
 		}
 	}
 
@@ -332,6 +341,133 @@ private:
 		vkGetDeviceQueue(m_LogicalDevice, indices.presentFamily.value(), 0, &m_PresentQueue);		//presentation queue
 	}
 
+	void createSwapChain()
+	{
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_PhysicalDevice);
+
+		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+		// why +1?
+		// sometimes we may have to wait on the driver to perform internal operations before we can acquire
+		// another image to render to. Therefore it is recommended to request at least one more image than the minimum.
+		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1; 
+
+		if (swapChainSupport.capabilities.maxImageCount > 0					// zero here means there is no maximum!
+			&& imageCount > swapChainSupport.capabilities.maxImageCount)
+		{
+			imageCount = swapChainSupport.capabilities.maxImageCount;
+		}
+
+		VkSwapchainCreateInfoKHR createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		createInfo.surface = m_Surface;
+		createInfo.minImageCount = imageCount;
+		createInfo.imageFormat = surfaceFormat.format;
+		createInfo.imageColorSpace = surfaceFormat.colorSpace;
+		createInfo.imageExtent = extent;
+		createInfo.imageArrayLayers = 1;	// amount of layers each image consists of, usually 1 except stereoscopic 3d application 
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // what operations we'll use swap chain for 
+
+		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);
+		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+		if (indices.graphicsFamily != indices.presentFamily)
+		{
+			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; // concurrent: can be shared across multiple queue families
+			createInfo.queueFamilyIndexCount = 2;
+			createInfo.pQueueFamilyIndices = queueFamilyIndices;
+		}
+		else  // graphics and presentation queue families are the same (which is the case on most hardware)
+		{
+			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;	// exclusive: image is owned by one queue family at a time;
+																		// must be explicitly transferred before use in another queue
+																		// family. Offers the best performance.
+			createInfo.queueFamilyIndexCount = 0;		// optional
+			createInfo.pQueueFamilyIndices = nullptr;	// optional
+		}
+	
+		createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+		
+		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;	// almost always ignore alpha channel, so set to opaque
+
+		createInfo.presentMode = presentMode;
+		createInfo.clipped = VK_TRUE;	// true : don't care about color of obscured pixels
+		
+		createInfo.oldSwapchain = VK_NULL_HANDLE;	// for now, only create one swap chain
+
+		if (vkCreateSwapchainKHR(m_LogicalDevice, &createInfo, nullptr, &m_SwapChain) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create swap chain!");
+		}
+
+		vkGetSwapchainImagesKHR(m_LogicalDevice, m_SwapChain, &imageCount, nullptr);
+		m_SwapChainImages.resize(imageCount);
+		vkGetSwapchainImagesKHR(m_LogicalDevice, m_SwapChain, &imageCount, m_SwapChainImages.data());
+		
+		m_SwapChainImageFormat = surfaceFormat.format;
+		m_SwapChainExtent = extent;
+	}
+
+	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
+	{
+		for (const VkSurfaceFormatKHR& availableFormat : availableFormats)
+		{
+			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB					// if sRGB format is found 
+				&& availableFormat.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR)	// B8G8R8A8 is one of the most common ones
+			{	
+				return availableFormat;
+			}
+		}
+		return  availableFormats[0];	// otherwise, just use the first format that is specified
+	}
+	
+	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+	{
+		for (const VkPresentModeKHR& availablePresentMode : availablePresentModes)
+		{
+			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)	// used to implement triple buffering (less latency)
+			{
+				return availablePresentMode;	
+			}
+		}
+		return VK_PRESENT_MODE_FIFO_KHR; // if VK_PRESENT_MODE_MAILBOX_KHR is not available, use a guaranteed available mode
+	}
+
+	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilites)	// extent = resolution of the swap chain images
+	{
+		//Vulkan works with pixel units, but the screen resolution (WIDTH, HEIGHT) is in screen coordinates.
+		//Use glfwGetFramebufferSize to query the resolution of the window in pixel before matching to min/max image extent
+		
+		//maximum value of uint32_t; special value to indicate that we will be picking the resolution that best matches the window
+		//within the minImageExtent and maxImageExtent
+
+		if (capabilites.currentExtent.width != UINT32_MAX) 
+		{
+			return capabilites.currentExtent;
+		}
+		else
+		{ 
+			int width, height;
+			glfwGetFramebufferSize(m_Window, &width, &height);
+
+			VkExtent2D actualExtent =
+			{
+				static_cast<uint32_t>(width),
+				static_cast<uint32_t>(height)
+			};
+
+			actualExtent.width = std::max(capabilites.minImageExtent.width, 
+				std::min(capabilites.maxImageExtent.width, actualExtent.width));
+
+			actualExtent.height = std::max(capabilites.minImageExtent.height,
+				std::min(capabilites.maxImageExtent.height, actualExtent.height));
+
+			return actualExtent;
+		}
+	}
+
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
 	{
 		SwapChainSupportDetails details;
@@ -422,7 +558,7 @@ private:
 			VkBool32 presentSupport = false;
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_Surface, &presentSupport);
 
-			if (presentSupport)		// do not use "== true" for VkBool32
+			if (presentSupport = VK_TRUE)		// do not use "== true" for VkBool32
 			{
 				indices.presentFamily = i;
 			}
