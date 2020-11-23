@@ -5,7 +5,7 @@ Last Modified:	2020.11.17
 
 Current Page:
 https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Window_surface
-Window Surface
+Window Surface (complete!)
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
