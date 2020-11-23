@@ -1,11 +1,19 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
+<<<<<<< Updated upstream
 Last Modified:	2020.11.15
 
 Current Page:
 https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Logical_device_and_queues
 Logical device and queues
+=======
+Last Modified:	2020.11.23
+
+Current Page:
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
+Swap Chains
+>>>>>>> Stashed changes
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -26,12 +34,17 @@ const std::vector<const char*> validationLayers =	// vector of Vulkan validation
 	"VK_LAYER_KHRONOS_validation"
 };
 
+const std::vector<const char*> deviceExtensions =
+{
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
+
 #ifdef NDEBUG	// NDEBUG = Not Debug	
 	const bool enableValidationLayers = false;
 #else
 	const bool enableValidationLayers = true;
 #endif
-
 
 
 // create/destroy debug functions must either be a static class function or function outside the class
@@ -74,6 +87,14 @@ struct QueueFamilyIndices
 		return graphicsFamily.has_value();
 	}
 };
+
+struct SwapChainSupportDetails
+{
+	VkSurfaceCapabilitiesKHR capabilities;
+	std::vector<VkSurfaceFormatKHR> formats;
+	std::vector<VkPresentModeKHR> presentModes;
+};
+
 
 class HelloTriangleApplication 
 {	
@@ -271,7 +292,8 @@ private:
 
 		createInfo.pEnabledFeatures = &deviceFeatures;		// currently empty (will revisit later)
 
-		createInfo.enabledExtensionCount = 0;
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
 		if (enableValidationLayers)
 		{
@@ -288,23 +310,82 @@ private:
 			throw std::runtime_error("Failed to create logical device!");
 		}
 
+<<<<<<< Updated upstream
 		vkGetDeviceQueue(m_LogicalDevice, indices.graphicsFamily.value(), 0, &m_GraphicsQueue);
+=======
+		vkGetDeviceQueue(m_LogicalDevice, indices.graphicsFamily.value(), 0, &m_GraphicsQueue);		//graphics queue
+		vkGetDeviceQueue(m_LogicalDevice, indices.presentFamily.value(), 0, &m_PresentQueue);		//presentation queue
+>>>>>>> Stashed changes
+	}
+
+	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
+	{
+		SwapChainSupportDetails details;
+
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_Surface, &details.capabilities);	//basic surface capabilities
+
+		uint32_t formatCount;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_Surface, &formatCount, nullptr);		// query supported surface formats
+		if (formatCount != 0)
+		{
+			details.formats.resize(formatCount);	// resize to hold all available formats
+			vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_Surface, &formatCount, details.formats.data());
+		}
+
+		uint32_t presentModeCount;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_Surface, &presentModeCount, nullptr);
+		if (presentModeCount != 0)
+		{
+			details.presentModes.resize(presentModeCount);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_Surface, &presentModeCount, details.presentModes.data());
+		}
+
+		return details;
 	}
 
 	bool isDeviceSuitable(VkPhysicalDevice device)
 	{
-		VkPhysicalDeviceProperties deviceProperties;
-		vkGetPhysicalDeviceProperties(device, &deviceProperties);
-
-		VkPhysicalDeviceFeatures deviceFeatures;					// texture compression, 64bit float, multi-viewport rendering (useful for VR)
-		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
 		QueueFamilyIndices indices = findQueueFamilies(device);		// currently set to find queue family that supports VK_QUEUE_GRAPHICS_BIT
-		return indices.isComplete();
+		
+		bool extensionsSupported = checkDeviceExtensionSupport(device);
+		
+		bool swapChainAdequate = false;
+		if (extensionsSupported)
+		{
+			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+			swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+		}
+		
+		return indices.isComplete() && extensionsSupported && swapChainAdequate;
 
-		// returns true for GPUs with geometry shader support
+		// isComplete(): returns true for GPUs with geometry shader support
+		// sample if wanting to narrow down to geometry shaders:
 		// return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && deviceFeatures.geometryShader;	
+
+		// checkDeviceExtensionSupport: currently set up for swapchain extension
+
+		// swapChainAdequate: at least one supported image format and one supported presentation mode given the window surface
 	}
+
+	bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+	{
+		uint32_t extensionCount;
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+		std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+		for (const VkExtensionProperties& extension : availableExtensions)
+		{
+			requiredExtensions.erase(extension.extensionName);	// erase if required extension is in the vector
+		}
+		bool isEmpty = requiredExtensions.empty();
+		//std::cout << "\nisEmpty = " << isEmpty << std::endl;
+		return isEmpty;	// if all the required extension were present (and thus erased), returns true
+	}
+
 
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
 	{
@@ -323,6 +404,17 @@ private:
 				indices.graphicsFamily = i;
 			}
 
+<<<<<<< Updated upstream
+=======
+			VkBool32 presentSupport = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_Surface, &presentSupport);
+
+			if (presentSupport)		// do not use "== true" for VkBool32
+			{
+				indices.presentFamily = i;
+			}
+
+>>>>>>> Stashed changes
 			if (indices.isComplete())	// if queueFamily is found, exit early
 			{
 				break;
