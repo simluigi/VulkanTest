@@ -1,11 +1,11 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.11.23
+Last Modified:	2020.11.25
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
-Swap Chains
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Introduction
+Graphics Pipeline Basics: Introduction
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -124,6 +124,8 @@ private:
 	VkFormat				m_SwapChainImageFormat;
 	VkExtent2D				m_SwapChainExtent;
 
+	std::vector<VkImageView> m_SwapChainImageViews;
+
 	void initWindow()
 	{
 		glfwInit();			// initialize glfw
@@ -141,6 +143,39 @@ private:
 		pickPhysicalDevice();
 		createLogicalDevice();
 		createSwapChain();
+		createImageViews();
+	}
+
+	void createImageViews()
+	{
+		m_SwapChainImageViews.resize(m_SwapChainImages.size());		// allocate enough size to fit all image views
+
+		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
+		{
+			VkImageViewCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.image = m_SwapChainImages[i];
+
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;	// also try 1D/3D/cube maps
+			createInfo.format = m_SwapChainImageFormat;
+
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;	// default mapping
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+
+			if (vkCreateImageView(m_LogicalDevice, &createInfo, nullptr, &m_SwapChainImageViews[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create image views!");
+			}
+		}
+
 	}
 
 	void mainLoop()
@@ -152,6 +187,11 @@ private:
 	}
 	void cleanup()
 	{
+		for (VkImageView imageView : m_SwapChainImageViews)
+		{
+			vkDestroyImageView(m_LogicalDevice, imageView, nullptr);
+		}
+
 		vkDestroySwapchainKHR(m_LogicalDevice, m_SwapChain, nullptr);
 		vkDestroyDevice(m_LogicalDevice, nullptr);
 
