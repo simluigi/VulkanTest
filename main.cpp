@@ -1,11 +1,11 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.11.25
+Last Modified:	2020.11.27
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Introduction
-Graphics Pipeline Basics: Introduction
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Shader_modules
+Graphics Pipeline Basics: Shader Modules(complete!)
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -21,6 +21,7 @@ Graphics Pipeline Basics: Introduction
 #include <stdexcept>		// reporting and propagating errors
 #include <cstdlib>			// EXIT_SUCCESS and EXIT_FAILURE
 #include <set>
+#include <fstream>			// for loading shader binary data
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -144,39 +145,12 @@ private:
 		createLogicalDevice();
 		createSwapChain();
 		createImageViews();
+		createGraphicsPipeline();
 	}
 
-	void createImageViews()
-	{
-		m_SwapChainImageViews.resize(m_SwapChainImages.size());		// allocate enough size to fit all image views
 
-		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
-		{
-			VkImageViewCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			createInfo.image = m_SwapChainImages[i];
 
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;	// also try 1D/3D/cube maps
-			createInfo.format = m_SwapChainImageFormat;
 
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;	// default mapping
-			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			createInfo.subresourceRange.baseMipLevel = 0;
-			createInfo.subresourceRange.levelCount = 1;
-			createInfo.subresourceRange.baseArrayLayer = 0;
-			createInfo.subresourceRange.layerCount = 1;
-
-			if (vkCreateImageView(m_LogicalDevice, &createInfo, nullptr, &m_SwapChainImageViews[i]) != VK_SUCCESS)
-			{
-				throw std::runtime_error("Failed to create image views!");
-			}
-		}
-
-	}
 
 	void mainLoop()
 	{
@@ -450,6 +424,84 @@ private:
 		m_SwapChainExtent = extent;
 	}
 
+
+	void createImageViews()
+	{
+		m_SwapChainImageViews.resize(m_SwapChainImages.size());		// allocate enough size to fit all image views
+
+		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
+		{
+			VkImageViewCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.image = m_SwapChainImages[i];
+
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;	// also try 1D/3D/cube maps
+			createInfo.format = m_SwapChainImageFormat;
+
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;	// default mapping
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+
+			if (vkCreateImageView(m_LogicalDevice, &createInfo, nullptr, &m_SwapChainImageViews[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create image views!");
+			}
+		}
+
+	}
+
+	void createGraphicsPipeline()
+	{
+		const std::vector<char> vertShaderCode = readFile("shaders/vert.spv");
+		const std::vector<char> fragShaderCode = readFile("shaders/frag.spv");
+
+		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;		// enum for programmable stages in Graphics Pipeline: Intro
+		vertShaderStageInfo.module = vertShaderModule;
+		vertShaderStageInfo.pName = "main";					// entrypoint function name
+
+		VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+		fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragShaderStageInfo.module = fragShaderModule;
+		fragShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+		vkDestroyShaderModule(m_LogicalDevice, fragShaderModule, nullptr);
+		vkDestroyShaderModule(m_LogicalDevice, vertShaderModule, nullptr);
+	}
+
+	VkShaderModule createShaderModule(const std::vector<char>& code)	// creates VkShaderModule from buffer 
+	{	
+		VkShaderModuleCreateInfo createInfo{};	// specify a pointer to the bugger with the bytecode and length
+		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		createInfo.codeSize = code.size();
+
+		// size of bytecode is in bytes, but bytecode pointer is uint32_t pointer rather than a char pointer.
+		// thus, we need to recast the pointer as below.
+		createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());	
+
+		VkShaderModule shaderModule;
+		if (vkCreateShaderModule(m_LogicalDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create shader module!");
+		}
+
+		return shaderModule;
+	}
+
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
 	{
 		for (const VkSurfaceFormatKHR& availableFormat : availableFormats)
@@ -654,6 +706,30 @@ private:
 			}
 		}
 		return true;
+	}
+
+	static std::vector<char> readFile(const std::string& fileName)
+	{
+		std::ifstream file(fileName, std::ios::ate			// ate = start reading at EOF 
+			| std::ios::binary);	// binary = read file as binary file (avoid text transformations)
+
+		if (file.is_open() == false)
+		{
+			throw std::runtime_error("Failed to open file!");
+		}
+
+		size_t fileSize = (size_t)file.tellg();		// telg() = returns input stream position. 
+		std::vector<char> buffer(fileSize);			// reading at EOF essentially gives us the size of the file for the buffer
+
+		file.seekg(0);								// return to beginning of file
+		file.read(buffer.data(), fileSize);			// read(x, y) = read up to count y and assign to buffer x
+													// in this case, read all the bytes at once
+
+		// std::cout << fileSize << std::endl;		// check file byte size with actual file (properties)
+
+		file.close();
+
+		return buffer;
 	}
 };
 
