@@ -4,8 +4,9 @@ Author:			Sim Luigi
 Last Modified:	2020.11.28
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Render_passes
-Graphics Pipeline Basics: Render Passes(complete!)
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Conclusion
+Graphics Pipeline Basics: Conclusion(complete!)
+* missing brackets in multisampling{} declaration added.
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -130,6 +131,8 @@ private:
 	VkRenderPass		m_RenderPass;
 	VkPipelineLayout	m_PipelineLayout;
 
+	VkPipeline			m_GraphicsPipeline;		// yay
+
 	void initWindow()
 	{
 		glfwInit();			// initialize glfw
@@ -162,6 +165,7 @@ private:
 	}
 	void cleanup()
 	{
+		vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
 		vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
 
@@ -496,7 +500,6 @@ private:
 
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentReference;
 
@@ -519,6 +522,8 @@ private:
 
 		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
 		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		// Shader Stages
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -548,7 +553,7 @@ private:
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 		// 3.) Viewports and Scissors
@@ -576,12 +581,9 @@ private:
 
 		VkPipelineRasterizationStateCreateInfo rasterizer{};
 		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-
 		rasterizer.depthClampEnable = VK_FALSE;			// VK_TRUE: fragments beyond near and far planes are clamped to them
 														// rather than discarding them; useful with shadow mapping
-
 		rasterizer.rasterizerDiscardEnable = VK_FALSE;
-
 		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;	// FILL = fill area of polygon with fragments
 														// LINE = polygon edges drawn as lines (i.e. wireframe)
 														// POINT = polygon vertices are drawn as points
@@ -597,7 +599,7 @@ private:
 
 		// 5.) Multisampling 
 
-		VkPipelineMultisampleStateCreateInfo multisampling;
+		VkPipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 		multisampling.sampleShadingEnable = VK_FALSE;
 		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -673,6 +675,48 @@ private:
 		if (vkCreatePipelineLayout(m_LogicalDevice, &pipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create pipeline layout!");
+		}
+
+		// 10.) Graphics Pipeline creation: Putting everything together to create the pipeline!!
+		//		Combine all the objects: Shader Stages, Fixed-function states, Pipeline Layout, Render Passes
+
+		// ...but before that, we need to create a Pipeline info struct:
+
+		// reference the array of VkPipelineShaderStageCreateInfo structs
+		VkGraphicsPipelineCreateInfo pipelineInfo{};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		pipelineInfo.stageCount = 2;
+		pipelineInfo.pStages = shaderStages;
+
+		// reference all the structures described in the fixed-function stage
+		pipelineInfo.pVertexInputState = &vertexInputInfo;
+		pipelineInfo.pInputAssemblyState = &inputAssembly;
+		pipelineInfo.pViewportState = &viewportState;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisampling;
+		pipelineInfo.pDepthStencilState = nullptr;			// optional
+		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.pDynamicState = nullptr;				// optional
+
+		// pipelineInfo.flags - none at the moment(see below: basePipelineHandle and basePipelineIndex)
+
+		// pipeline layout: Vulkan handle, NOT struct pointer
+		pipelineInfo.layout = m_PipelineLayout;
+
+		// reference to the render pass and the subpass index
+		pipelineInfo.renderPass = m_RenderPass;
+		pipelineInfo.subpass = 0;
+
+		// these values are only used if the VK_PIPELINE_CREATE_DERIVATIVE_BIT flag 
+		// is also specified in the flags field of VkGraphicsPipelineCreateInfo
+		pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;	// optional; derive new pipeline from existing pipeline
+		pipelineInfo.basePipelineIndex = -1;				// optional; derive new pipeline from existing pipeline index
+
+		// Creating the actual graphics pipeline:
+		// Second argument (VK_NULL_HANDLE): pipeline cache (revisit later)
+		if (vkCreateGraphicsPipelines(m_LogicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create graphics pipeline!");
 		}
 
 		vkDestroyShaderModule(m_LogicalDevice, fragShaderModule, nullptr);
