@@ -4,8 +4,8 @@ Author:			Sim Luigi
 Last Modified:	2020.11.28
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Fixed_functions
-Graphics Pipeline Basics: Fixed Functions (complete!)
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Render_passes
+Graphics Pipeline Basics: Render Passes(complete!)
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -127,6 +127,7 @@ private:
 
 	std::vector<VkImageView> m_SwapChainImageViews;
 
+	VkRenderPass		m_RenderPass;
 	VkPipelineLayout	m_PipelineLayout;
 
 	void initWindow()
@@ -147,11 +148,9 @@ private:
 		createLogicalDevice();
 		createSwapChain();
 		createImageViews();
+		createRenderPass();
 		createGraphicsPipeline();
 	}
-
-
-
 
 
 	void mainLoop()
@@ -164,6 +163,7 @@ private:
 	void cleanup()
 	{
 		vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
+		vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
 
 		for (VkImageView imageView : m_SwapChainImageViews)
 		{
@@ -461,6 +461,57 @@ private:
 
 	}
 
+	void createRenderPass()
+	{
+		VkAttachmentDescription colorAttachment{};
+		colorAttachment.format = m_SwapChainImageFormat;	// format of color attachment must match format of swap chain images
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;	// no multisampling yet
+
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;		// what to do with data before rendering
+
+		// VK_ATTACHMENT_LOAD_OP_LOAD		: Preserve existing contents of attachment
+		// VK_ATTACHMENT_LOAD_OP_CLEAR		: Clear the values to a constant at the start (in this case, clear to black)
+		// VK_ATTACHMENT_LOAD_OP_DONT_CARE	: Existing contents are undefined; we don't care about them
+
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;		// what to do with data after rendering
+
+		// VK_ATTACHMENT_STORE_OP_STORE		: Rendered contents will be stored in memory and can be read later
+		// VK_ATTACHMENT_STORE_OP_DONT_CARE	: Contents of the framebuffer will be undefined ater the rendering operation
+
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;	// not using stencil buffer at the moment
+		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;		// which layout image will have prior to render pass
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;	// layout to automatically transition to after pass finishes
+
+		// Common Layouts:
+		// VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: Images used as color attachment
+		// VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : Images to be presented in the swap chain
+		// VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation
+
+
+		VkAttachmentReference colorAttachmentReference{};
+		colorAttachmentReference.attachment = 0;	// attachment reference index; 0 = first index (only one attachment for now)
+		colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpass{};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentReference;
+
+		VkRenderPassCreateInfo renderPassInfo{};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount = 1;
+		renderPassInfo.pAttachments = &colorAttachment;
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpass;
+
+		if (vkCreateRenderPass(m_LogicalDevice, &renderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create render pass!");
+		}
+	}
 	void createGraphicsPipeline()
 	{
 		const std::vector<char> vertShaderCode = readFile("shaders/vert.spv");
