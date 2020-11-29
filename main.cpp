@@ -4,8 +4,8 @@ Author:			Sim Luigi
 Last Modified:	2020.11.28
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Framebuffers
-Drawing: Framebuffers
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Command_buffers
+Drawing: Command Buffers(complete!)
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -134,6 +134,9 @@ private:
 
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
 
+	VkCommandPool					m_CommandPool;		// command pool : manages memory used to store command buffers
+	std::vector<VkCommandBuffer>	m_CommandBuffers;	// automatically freed when pool is destroyed; no cleanup required.
+
 	void initWindow()
 	{
 		glfwInit();			// initialize glfw
@@ -155,6 +158,8 @@ private:
 		createRenderPass();
 		createGraphicsPipeline();
 		createFramebuffers();
+		createCommandPool();
+		createCommandBuffers();
 	}
 
 
@@ -167,6 +172,8 @@ private:
 	}
 	void cleanup()
 	{
+		vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
+
 		for (VkFramebuffer framebuffer : m_SwapChainFramebuffers)
 		{
 			vkDestroyFramebuffer(m_LogicalDevice, framebuffer, nullptr);
@@ -754,11 +761,99 @@ private:
 			{
 				throw std::runtime_error("Failed to create framebuffer!");
 			}
+		}
+	}
 
+	void createCommandPool()
+	{
+		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_PhysicalDevice);
 
+		VkCommandPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();	// drawing commands: graphics queue family chosen
+		poolInfo.flags = 0;		// optional, revisit later
 
+		if (vkCreateCommandPool(m_LogicalDevice, &poolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create command pool!");
+		}
+	}
+
+	void createCommandBuffers()
+	{
+		m_CommandBuffers.resize(m_SwapChainFramebuffers.size());
+
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.commandPool = m_CommandPool;
+		
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;					
+		// PRIMARY:		can be submitted to queue for execution, but cannot be called from other command buffers
+		// SECONDARY:	cannot be submitted directly, but can be called from primary command buffers
+
+		allocInfo.commandBufferCount = (uint32_t)m_CommandBuffers.size();
+
+		if (vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, m_CommandBuffers.data()) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to allocate command buffers!");
 		}
 
+		// Starting command buffer recording
+		for (size_t i = 0; i < m_CommandBuffers.size(); i++)
+		{
+			VkCommandBufferBeginInfo beginInfo{};
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+			beginInfo.flags = 0;	// optional
+			// VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: command buffer re-recorded right after executing it once
+			// VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: secondary command buffer; entirely within single render pass
+			// VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: command buffer can be resubmitted while already pending execution
+			
+			beginInfo.pInheritanceInfo = nullptr;		// optional, only for secondary command buffers (which state to inherit from)
+
+			if (vkBeginCommandBuffer(m_CommandBuffers[i], &beginInfo) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to begin recording command buffer!");
+			}
+
+			// Starting a render pas
+			VkRenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = m_RenderPass;
+			renderPassInfo.framebuffer = m_SwapChainFramebuffers[i];
+
+			renderPassInfo.renderArea.offset = { 0, 0 };
+			renderPassInfo.renderArea.extent = m_SwapChainExtent;	// match render area to size of attachments for best performance
+
+			VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+			renderPassInfo.clearValueCount = 1;						// clear values for VK_ATTACHMENT_LOAD_OP_CLEAR
+			renderPassInfo.pClearValues = &clearColor;
+
+			vkCmdBeginRenderPass(m_CommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+			// first  : command buffer to record to
+			// second : details of render pass provided
+			// third  : controls how drawing commands within render pass will be provided.
+			//			VK_SUBPASS_CONTENTS_INLINE: render pass contents embedded in the primary command buffer;
+			//										no secondary command buffers will be executed.
+			//			VK_SUBPASS_CONTENTS_COMMAND_BUFFERS: render pass commands executed from secondary command buffers
+
+			vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+			// VK_PIPELINE_BIND_POINT_GRAPHICS for graphics pipeline
+			// VK_PIPELINE_BIND_POINT_COMPUTE for compute pipeline
+
+			vkCmdDraw(m_CommandBuffers[i], 3, 1, 0, 0);
+			// first	: commandBuffer
+			// second	: vertexCount: even without vertex buffer, still drawing 3 vertices (triangle)
+			// third	: instanceCount: used for instanced rendering, otherwise 1)
+			// fourth	: firstInstance: used as offset for instanced rendering, defines lowest value of gl_InstanceIndex 
+
+			vkCmdEndRenderPass(m_CommandBuffers[i]);
+
+			if (vkEndCommandBuffer(m_CommandBuffers[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to record command buffer!");
+			}
+		}
 	}
 
 	VkShaderModule createShaderModule(const std::vector<char>& code)	// creates VkShaderModule from buffer 
