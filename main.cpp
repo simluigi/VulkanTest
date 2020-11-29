@@ -4,8 +4,8 @@ Author:			Sim Luigi
 Last Modified:	2020.11.28
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Command_buffers
-Drawing: Command Buffers(complete!)
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Rendering_and_presentation
+Drawing: Rendering and Presentation(First Triangle Complete!)
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -25,6 +25,9 @@ Drawing: Command Buffers(complete!)
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
+
+const int MAX_FRAMES_IN_FLIGHT = 2;		// how many frames should be processed concurrently 
+
 const std::vector<const char*> validationLayers =	// vector of Vulkan validation layers 
 {
 	"VK_LAYER_KHRONOS_validation"
@@ -107,35 +110,39 @@ public:
 
 private:
 
-	GLFWwindow*		m_Window;
+	GLFWwindow*					m_Window;
 
 	VkInstance					m_Instance;
 	VkDebugUtilsMessengerEXT	m_DebugMessenger;	// debug callback
 	VkSurfaceKHR				m_Surface;
 
-	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
+	VkPhysicalDevice			m_PhysicalDevice = VK_NULL_HANDLE;
 
-	VkDevice m_LogicalDevice;	// logical device
+	VkDevice					m_LogicalDevice;	// logical device
 
-	VkQueue	m_GraphicsQueue;
-	VkQueue	m_PresentQueue;
+	VkQueue						m_GraphicsQueue;
+	VkQueue						m_PresentQueue;
 
-	VkSwapchainKHR			m_SwapChain;
-	std::vector<VkImage>	m_SwapChainImages;
-	VkFormat				m_SwapChainImageFormat;
-	VkExtent2D				m_SwapChainExtent;		// extent : resolution size
+	VkSwapchainKHR				m_SwapChain;
+	std::vector<VkImage>		m_SwapChainImages;
+	VkFormat					m_SwapChainImageFormat;
+	VkExtent2D					m_SwapChainExtent;		// extent : resolution size
 
-	std::vector<VkImageView> m_SwapChainImageViews;
+	std::vector<VkImageView>	m_SwapChainImageViews;
+	std::vector<VkFramebuffer>	m_SwapChainFramebuffers;
 
-	VkRenderPass		m_RenderPass;
-	VkPipelineLayout	m_PipelineLayout;
-
-	VkPipeline			m_GraphicsPipeline;		
-
-	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
+	VkRenderPass				m_RenderPass;
+	VkPipelineLayout			m_PipelineLayout;
+	VkPipeline					m_GraphicsPipeline;		
 
 	VkCommandPool					m_CommandPool;		// command pool : manages memory used to store command buffers
 	std::vector<VkCommandBuffer>	m_CommandBuffers;	// automatically freed when pool is destroyed; no cleanup required.
+
+	std::vector<VkSemaphore>		m_ImageAvailableSemaphores;	// semaphores: essentially a 'signal' used to sync operations
+	std::vector<VkSemaphore>		m_RenderFinishedSemaphores;	
+	std::vector<VkFence>			m_InFlightFences;
+	std::vector<VkFence>			m_ImagesInFlight;	
+	size_t							m_CurrentFrame = 0;
 
 	void initWindow()
 	{
@@ -160,6 +167,7 @@ private:
 		createFramebuffers();
 		createCommandPool();
 		createCommandBuffers();
+		createSyncObjects();
 	}
 
 
@@ -168,10 +176,21 @@ private:
 		while (glfwWindowShouldClose(m_Window) == false)
 		{
 			glfwPollEvents();	// Update/event checker; also later : render a single frame
+			drawFrame();
 		}
+		
+		vkDeviceWaitIdle(m_LogicalDevice);	// let logical device finish operations before exiting the main loop 
 	}
+
 	void cleanup()
 	{
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{		
+			vkDestroySemaphore(m_LogicalDevice, m_RenderFinishedSemaphores[i], nullptr);
+			vkDestroySemaphore(m_LogicalDevice, m_ImageAvailableSemaphores[i], nullptr);
+			vkDestroyFence(m_LogicalDevice, m_InFlightFences[i], nullptr);
+		}
+
 		vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
 
 		for (VkFramebuffer framebuffer : m_SwapChainFramebuffers)
@@ -381,6 +400,7 @@ private:
 	{
 		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_PhysicalDevice);
 
+
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
 		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
@@ -389,6 +409,7 @@ private:
 		// sometimes we may have to wait on the driver to perform internal operations before we can acquire
 		// another image to render to. Therefore it is recommended to request at least one more image than the minimum.
 		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+
 
 		if (swapChainSupport.capabilities.maxImageCount > 0					// zero here means there is no maximum!
 			&& imageCount > swapChainSupport.capabilities.maxImageCount)
@@ -399,6 +420,7 @@ private:
 		VkSwapchainCreateInfoKHR createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		createInfo.surface = m_Surface;
+
 		createInfo.minImageCount = imageCount;
 		createInfo.imageFormat = surfaceFormat.format;
 		createInfo.imageColorSpace = surfaceFormat.colorSpace;
@@ -425,9 +447,7 @@ private:
 		}
 
 		createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-
 		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;	// almost always ignore alpha channel, so set to opaque
-
 		createInfo.presentMode = presentMode;
 		createInfo.clipped = VK_TRUE;	// true : don't care about color of obscured pixels
 
@@ -517,18 +537,29 @@ private:
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentReference;
 
+		VkSubpassDependency dependency{};
+		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependency.dstSubpass = 0;	// subpass index 0 (our first and only subpass)
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcAccessMask = 0;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		renderPassInfo.attachmentCount = 1;
 		renderPassInfo.pAttachments = &colorAttachment;
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
+		renderPassInfo.dependencyCount = 1;
+		renderPassInfo.pDependencies = &dependency;
 
 		if (vkCreateRenderPass(m_LogicalDevice, &renderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create render pass!");
 		}
 	}
+
 	void createGraphicsPipeline()
 	{
 		const std::vector<char> vertShaderCode = readFile("shaders/vert.spv");
@@ -803,12 +834,7 @@ private:
 		{
 			VkCommandBufferBeginInfo beginInfo{};
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
 			beginInfo.flags = 0;	// optional
-			// VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: command buffer re-recorded right after executing it once
-			// VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: secondary command buffer; entirely within single render pass
-			// VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: command buffer can be resubmitted while already pending execution
-			
 			beginInfo.pInheritanceInfo = nullptr;		// optional, only for secondary command buffers (which state to inherit from)
 
 			if (vkBeginCommandBuffer(m_CommandBuffers[i], &beginInfo) != VK_SUCCESS)
@@ -816,7 +842,7 @@ private:
 				throw std::runtime_error("Failed to begin recording command buffer!");
 			}
 
-			// Starting a render pas
+			// Starting a render pass
 			VkRenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			renderPassInfo.renderPass = m_RenderPass;
@@ -830,16 +856,7 @@ private:
 			renderPassInfo.pClearValues = &clearColor;
 
 			vkCmdBeginRenderPass(m_CommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-			// first  : command buffer to record to
-			// second : details of render pass provided
-			// third  : controls how drawing commands within render pass will be provided.
-			//			VK_SUBPASS_CONTENTS_INLINE: render pass contents embedded in the primary command buffer;
-			//										no secondary command buffers will be executed.
-			//			VK_SUBPASS_CONTENTS_COMMAND_BUFFERS: render pass commands executed from secondary command buffers
-
 			vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-			// VK_PIPELINE_BIND_POINT_GRAPHICS for graphics pipeline
-			// VK_PIPELINE_BIND_POINT_COMPUTE for compute pipeline
 
 			vkCmdDraw(m_CommandBuffers[i], 3, 1, 0, 0);
 			// first	: commandBuffer
@@ -854,6 +871,89 @@ private:
 				throw std::runtime_error("Failed to record command buffer!");
 			}
 		}
+	}
+
+	void createSyncObjects()
+	{
+		m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+		m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+		m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+		m_ImagesInFlight.resize(m_SwapChainImages.size(), VK_NULL_HANDLE);
+
+		VkSemaphoreCreateInfo semaphoreInfo{};
+		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkFenceCreateInfo fenceInfo{};
+		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{
+			if (vkCreateSemaphore(m_LogicalDevice, &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS
+			 || vkCreateSemaphore(m_LogicalDevice, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS
+			 || vkCreateFence(m_LogicalDevice, &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create synchronization objects for a frame!");
+			}
+		}
+	}
+
+	void drawFrame()
+	{
+		vkWaitForFences(m_LogicalDevice, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
+
+		uint32_t imageIndex;
+		vkAcquireNextImageKHR(m_LogicalDevice, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
+
+		// check if a previous frame is using this image (i.e. there is its frame to wait on)
+		if (m_ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
+		{
+			vkWaitForFences(m_LogicalDevice, 1, &m_ImagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+		}
+		// mark the image as now being in use by this frame
+		m_ImagesInFlight[imageIndex] = m_InFlightFences[m_CurrentFrame];
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+		VkSemaphore waitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = waitSemaphores;	// which semaphore to wait on before execution
+		submitInfo.pWaitDstStageMask = waitStages;		// which stage(s) of the pipeline to wait
+
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &m_CommandBuffers[imageIndex];
+
+		VkSemaphore signalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = signalSemaphores; // which semaphores to signal once command buffer(s) have finished execution
+
+		vkResetFences(m_LogicalDevice, 1, &m_InFlightFences[m_CurrentFrame]);
+
+		if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to submit draw command buffer!");
+		}
+
+		// submit the result back to the swap chain to have it show on screen
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = signalSemaphores;
+
+		VkSwapchainKHR swapChains[] = { m_SwapChain };
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = swapChains;
+		presentInfo.pImageIndices = &imageIndex;
+
+		presentInfo.pResults = nullptr;		// optional; array of VkResult values to check for each swap chain if 
+											// presentation was successful (when using multiple swap chains).
+
+		vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+
+		m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;	// advance to next frame
 	}
 
 	VkShaderModule createShaderModule(const std::vector<char>& code)	// creates VkShaderModule from buffer 
@@ -1001,7 +1101,6 @@ private:
 		return isEmpty;	// if all the required extension were present (and thus erased), returns true
 	}
 
-
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
 	{
 		QueueFamilyIndices indices;
@@ -1105,7 +1204,6 @@ private:
 		return buffer;
 	}
 };
-
 
 int main(void)
 {
