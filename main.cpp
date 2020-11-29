@@ -4,9 +4,8 @@ Author:			Sim Luigi
 Last Modified:	2020.11.28
 
 Current Page:
-https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Conclusion
-Graphics Pipeline Basics: Conclusion(complete!)
-* missing brackets in multisampling{} declaration added.
+https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Framebuffers
+Drawing: Framebuffers
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
@@ -131,7 +130,9 @@ private:
 	VkRenderPass		m_RenderPass;
 	VkPipelineLayout	m_PipelineLayout;
 
-	VkPipeline			m_GraphicsPipeline;		// yay
+	VkPipeline			m_GraphicsPipeline;		
+
+	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
 
 	void initWindow()
 	{
@@ -153,6 +154,7 @@ private:
 		createImageViews();
 		createRenderPass();
 		createGraphicsPipeline();
+		createFramebuffers();
 	}
 
 
@@ -165,6 +167,11 @@ private:
 	}
 	void cleanup()
 	{
+		for (VkFramebuffer framebuffer : m_SwapChainFramebuffers)
+		{
+			vkDestroyFramebuffer(m_LogicalDevice, framebuffer, nullptr);
+		}
+
 		vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
 		vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
@@ -721,6 +728,37 @@ private:
 
 		vkDestroyShaderModule(m_LogicalDevice, fragShaderModule, nullptr);
 		vkDestroyShaderModule(m_LogicalDevice, vertShaderModule, nullptr);
+	}
+
+	void createFramebuffers()	
+	{
+		m_SwapChainFramebuffers.resize(m_SwapChainImageViews.size());
+
+		for (size_t i = 0; i < m_SwapChainImageViews.size(); i++)
+		{
+			VkImageView attachments[] = 
+			{
+				m_SwapChainImageViews[i]
+			};
+
+			VkFramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferInfo.renderPass = m_RenderPass;			// framebuffer must be compatible with render pass
+			framebufferInfo.attachmentCount = 1;				// render pass pAtachment array
+			framebufferInfo.pAttachments = attachments;			// render pass pAtachment array
+			framebufferInfo.width = m_SwapChainExtent.width;
+			framebufferInfo.height = m_SwapChainExtent.height;
+			framebufferInfo.layers = 1;							// swap chain images are single images = value 1
+
+			if (vkCreateFramebuffer(m_LogicalDevice, &framebufferInfo, nullptr, &m_SwapChainFramebuffers[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create framebuffer!");
+			}
+
+
+
+		}
+
 	}
 
 	VkShaderModule createShaderModule(const std::vector<char>& code)	// creates VkShaderModule from buffer 
