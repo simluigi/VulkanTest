@@ -1,7 +1,7 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.11.28
+Last Modified:	2020.11.29
 
 Current Page:
 https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Rendering_and_presentation
@@ -143,16 +143,26 @@ private:
 	std::vector<VkFence>			m_InFlightFences;
 	std::vector<VkFence>			m_ImagesInFlight;	
 	size_t							m_CurrentFrame = 0;
+	bool							m_FramebufferResized = false;	// if window has been resized
 
 	void initWindow()
 	{
 		glfwInit();			// initialize glfw
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);		// do not create an OpenGL context
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);			// no window resizing for now
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);			// window resizing test
 
 		m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);		// create window with above hint conditions
+		glfwSetWindowUserPointer(m_Window, this);
+		glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallback);
 	}
+
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
+	{
+		HelloTriangleApplication* app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		app->m_FramebufferResized = true;
+	}
+
 	void initVulkan()
 	{
 		createInstance();
@@ -182,21 +192,19 @@ private:
 		vkDeviceWaitIdle(m_LogicalDevice);	// let logical device finish operations before exiting the main loop 
 	}
 
-	void cleanup()
+
+	// before recreating swap chain, call this to clean up older versions of it
+	void cleanupSwapChain()
 	{
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		{		
-			vkDestroySemaphore(m_LogicalDevice, m_RenderFinishedSemaphores[i], nullptr);
-			vkDestroySemaphore(m_LogicalDevice, m_ImageAvailableSemaphores[i], nullptr);
-			vkDestroyFence(m_LogicalDevice, m_InFlightFences[i], nullptr);
-		}
-
-		vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
-
 		for (VkFramebuffer framebuffer : m_SwapChainFramebuffers)
 		{
 			vkDestroyFramebuffer(m_LogicalDevice, framebuffer, nullptr);
 		}
+
+		// Frees up command buffers without destroying the command pool; 
+		// reuse the existing pool to allocate new command buffers
+		vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()),
+			m_CommandBuffers.data());
 
 		vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
@@ -208,6 +216,21 @@ private:
 		}
 
 		vkDestroySwapchainKHR(m_LogicalDevice, m_SwapChain, nullptr);
+	}
+
+	void cleanup()
+	{
+		cleanupSwapChain();
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{		
+			vkDestroySemaphore(m_LogicalDevice, m_RenderFinishedSemaphores[i], nullptr);
+			vkDestroySemaphore(m_LogicalDevice, m_ImageAvailableSemaphores[i], nullptr);
+			vkDestroyFence(m_LogicalDevice, m_InFlightFences[i], nullptr);
+		}
+
+		vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
+
 		vkDestroyDevice(m_LogicalDevice, nullptr);
 
 		if (enableValidationLayers)
@@ -219,6 +242,31 @@ private:
 
 		glfwDestroyWindow(m_Window);	// uninit window
 		glfwTerminate();				// uninit glfw
+	}
+
+	// create swap chain and all creation functions for the object that depend on the swap chain or the window size.
+	// This step is to be implemented when the swap chain is no longer compatible with the window surface;
+	// i.e. window size changing (and thus the extent values are no longer consistent)
+	void recreateSwapChain()
+	{
+		int width = 0, height = 0;
+		glfwGetFramebufferSize(m_Window, &width, &height);
+		while (width == 0 || height == 0)						// window is minimized; frame buffer size of 0
+		{
+			glfwGetFramebufferSize(m_Window, &width, &height);
+			glfwWaitEvents();									// window paused until window in foreground
+		}
+
+		vkDeviceWaitIdle(m_LogicalDevice);		// do not touch resources that are still in use, wait for them to complete.
+
+		cleanupSwapChain();
+
+		createSwapChain();			// recreate swap chain itself
+		createImageViews();			// based directly on the swap chain images
+		createRenderPass();			// depends on the format of swap chain images
+		createGraphicsPipeline();	// Viewport and Scissor size
+		createFramebuffers();		// based directly on the swap chain images
+		createCommandBuffers();		// based directly on the swap chain images
 	}
 
 	void createInstance()	// may provide useful information to the Vulkan driver
@@ -465,6 +513,8 @@ private:
 		m_SwapChainImageFormat = surfaceFormat.format;
 		m_SwapChainExtent = extent;
 	}
+
+
 
 
 	void createImageViews()
@@ -903,7 +953,20 @@ private:
 		vkWaitForFences(m_LogicalDevice, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
 		uint32_t imageIndex;
-		vkAcquireNextImageKHR(m_LogicalDevice, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
+		
+		VkResult result = vkAcquireNextImageKHR(m_LogicalDevice, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
+
+		// check if swap chain is out of date
+		if (result == VK_ERROR_OUT_OF_DATE_KHR)
+		{
+			recreateSwapChain();
+			return;
+		}
+		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+		{
+			throw std::runtime_error("Failed to acquire swap chain image!");
+		}
+
 
 		// check if a previous frame is using this image (i.e. there is its frame to wait on)
 		if (m_ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -951,7 +1014,19 @@ private:
 		presentInfo.pResults = nullptr;		// optional; array of VkResult values to check for each swap chain if 
 											// presentation was successful (when using multiple swap chains).
 
-		vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+		result = vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+
+		if (result == VK_ERROR_OUT_OF_DATE_KHR 
+		 || result == VK_SUBOPTIMAL_KHR
+		 || m_FramebufferResized == true)
+		{
+			m_FramebufferResized = false;
+			recreateSwapChain();
+		}
+		else if (result != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to present swap chain image!");
+		}
 
 		m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;	// advance to next frame
 	}
