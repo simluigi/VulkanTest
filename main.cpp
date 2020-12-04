@@ -1,54 +1,80 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.11.29
+Last Modified:	2020.12.04
 
 Current Page:
 https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Rendering_and_presentation
-Drawing: Rendering and Presentation(First Triangle Complete!)
+Drawing: Swap Chain Recreation (Complete!)
+Comments: Currently at Render Passes
+
+<< 気づいたこと・メモ >>
+
+＊　Vulkan上のオブジェクトを生成するとき、ほとんど以下の段階で実装します。
+	1.) オブジェクト情報構造体「CreateInfo」を作成します。
+	2.) 構造体の種類を選択します。（ImageViewの場合、VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO、など）
+	3.) 構造体の設定・フラッグを定義します。
+	4.) CreateInfo構造体に基づいてオブジェクト自体を生成します。
+		例:　VkResult = vkCreateImageView(m_LogicalDevice...)
+
+＊	Vulkan専用のデバッグ機能「Validation Layer」「バリデーションレイヤー」について：
+	複雑ですが、簡単にイメージすると、画像編集ソフト（Photoshop、GIMPなど）のレイヤーと同じように重ねているの方が想像しやすいです。
+	
+	例：処理A
+	　→レイヤー①：正常
+		→レイヤー②：正常
+		　→レイヤー③：エラー（デバッグメッセンジャー表示、エラーハンドリング）
+
+
 =======================================================================*/
 
-#define GLFW_INCLUDE_VULKAN		// replaces #include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>			// and automatically bundles it with glfw include
+#define GLFW_INCLUDE_VULKAN		// VulkanSDKをGLFWと一緒にインクルードします。
+#include <GLFW/glfw3.h>			// replaces #include <vulkan/vulkan.h> and automatically bundles it with glfw include
 
 #include <iostream>
 #include <vector>
 #include <map>  
 #include <optional>			// C++17 and above
 #include <cstring>
-#include <algorithm>		// for std::min/max in chooseSwapExtent()
-#include <cstdint>			// necessary for UINT32_MAX in chooseSwapExtent()
-#include <stdexcept>		// reporting and propagating errors
-#include <cstdlib>			// EXIT_SUCCESS and EXIT_FAILURE
+#include <algorithm>		// std::min/max : chooseSwapExtent()
+#include <cstdint>			// UINT32_MAX   : in chooseSwapExtent()
+#include <stdexcept>		// std::runtime error、など
+#include <cstdlib>			// EXIT_SUCCESS・EXIT_FAILURE
 #include <set>
-#include <fstream>			// for loading shader binary data
+#include <fstream>			// シェーダーのバイナリデータを読み込む　for loading shader binary data
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const int MAX_FRAMES_IN_FLIGHT = 2;		// how many frames should be processed concurrently 
+const int MAX_FRAMES_IN_FLIGHT = 2;		// 同時に処理されるフレームの最大数
+										// how many frames should be processed concurrently 
 
-const std::vector<const char*> validationLayers =	// vector of Vulkan validation layers 
+const std::vector<const char*> validationLayers =	// Vulkanのバリデーションレイヤー：SDK上のエラーチェック仕組み
+													// Vulkan Validation layers: SDK's own error checking implementation
 {
 	"VK_LAYER_KHRONOS_validation"
 };
 
-const std::vector<const char*> deviceExtensions =
+const std::vector<const char*> deviceExtensions =	// Vulkanエクステンション（今回はSwapChain)
 {
-	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME					// 誤字を避けるためのマクロ定義
 };
 
 
-#ifdef NDEBUG	// NDEBUG = Not Debug	
-const bool enableValidationLayers = false;
+#ifdef NDEBUG										// NDEBUG = Not Debug	
+const bool enableValidationLayers = false;			// バリデーションレイヤー無効
 #else
-const bool enableValidationLayers = true;
+const bool enableValidationLayers = true;			// バリデーションレイヤー有効
 #endif
 
-
+// デバッグ機能生成・削除関数はクラス外又はスタティックで設定しないといけません。
 // create/destroy debug functions must either be a static class function or function outside the class
 
-VkResult CreateDebugUtilsMessengerEXT(		// extension function; not automatically loaded. Need to specify address via vkGetInstanceProcedureAddr
+// デバッグメッセンジャー生成
+VkResult CreateDebugUtilsMessengerEXT(	// エクステンション関数：自動的にロードされていません。
+										// 関数アドレスをvkGetInstanceProcedureAddr()で特定できます。
+										// extension function; not automatically loaded. Need to specify address via	
+										// vkGetInstanceProcedureAddr()
 	VkInstance instance,
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 	const VkAllocationCallbacks* pAllocator,
@@ -65,6 +91,7 @@ VkResult CreateDebugUtilsMessengerEXT(		// extension function; not automatically
 	}
 }
 
+// デバッグメッセンジャー削除
 void DestroyDebugUtilsMessengerEXT(
 	VkInstance instance,
 	VkDebugUtilsMessengerEXT debugMessenger,
@@ -77,18 +104,22 @@ void DestroyDebugUtilsMessengerEXT(
 	}
 }
 
+// Vulkan上のあらゆる処理はキューで処理されています。処理によってキューの種類も異なります。
 struct QueueFamilyIndices
 {
+	// optional: 情報が存在しているかしていないかのコンテナ（どちらでも可能）
 	// optional: optional contained value; value MAY or MAY NOT be present. (C++17)
-	std::optional<uint32_t> graphicsFamily;		// graphics family
-	std::optional<uint32_t> presentFamily;		// presentation family
+	std::optional<uint32_t> graphicsFamily;		// グラフィック系キュー　graphics family	
+	std::optional<uint32_t> presentFamily;		// プレゼンテーション（描画）キュー　presentation family
 
-	bool isComplete()							// check if value exists
+	bool isComplete()							// キューの各値がちゃんと存在しているか　check if value exists for all values
 	{
 		return graphicsFamily.has_value() && presentFamily.has_value();
 	}
 };
 
+// SwapChain詳細
+// Swap Chain Details
 struct SwapChainSupportDetails
 {
 	VkSurfaceCapabilitiesKHR capabilities;
@@ -96,11 +127,12 @@ struct SwapChainSupportDetails
 	std::vector<VkPresentModeKHR> presentModes;
 };
 
-
+// Main class
+// メインクラス
 class HelloTriangleApplication
 {
 public:
-	void run()
+	void run()	
 	{
 		initWindow();
 		initVulkan();
@@ -110,49 +142,54 @@ public:
 
 private:
 
-	GLFWwindow*					m_Window;
+	GLFWwindow*					m_Window;			// WINDOWSではなくGLFW;　クロスプラットフォームの実装
 
-	VkInstance					m_Instance;
-	VkDebugUtilsMessengerEXT	m_DebugMessenger;	// debug callback
-	VkSurfaceKHR				m_Surface;
+	VkInstance					m_Instance;			// インスタンス：アプリケーションとSDKのつながり
+	VkDebugUtilsMessengerEXT	m_DebugMessenger;	// デバッグコールバック
+	VkSurfaceKHR				m_Surface;			// GLFW -> Windows System Integration -> Window
 
-	VkPhysicalDevice			m_PhysicalDevice = VK_NULL_HANDLE;
+	VkPhysicalDevice			m_PhysicalDevice = VK_NULL_HANDLE;	// 物理デバイス（グラフィックスカード）
 
-	VkDevice					m_LogicalDevice;	// logical device
+	VkDevice					m_LogicalDevice;	// 物理デバイスとのシステムインターフェース
 
-	VkQueue						m_GraphicsQueue;
-	VkQueue						m_PresentQueue;
+	VkQueue						m_GraphicsQueue;	// グラフィックス専用キュー
+	VkQueue						m_PresentQueue;		// プレゼンテーション専用キュー
 
-	VkSwapchainKHR				m_SwapChain;
-	std::vector<VkImage>		m_SwapChainImages;
-	VkFormat					m_SwapChainImageFormat;
-	VkExtent2D					m_SwapChainExtent;		// extent : resolution size
+	VkSwapchainKHR				m_SwapChain;				// 表示する予定の画像のキュー
+	std::vector<VkImage>		m_SwapChainImages;			// キュー画像
+	VkFormat					m_SwapChainImageFormat;		// 画像フォーマット
+	VkExtent2D					m_SwapChainExtent;			// extent : 画像レゾルーション（通常、ウィンドウと同じ）
 
-	std::vector<VkImageView>	m_SwapChainImageViews;
-	std::vector<VkFramebuffer>	m_SwapChainFramebuffers;
+	std::vector<VkImageView>	m_SwapChainImageViews;		// VkImageのハンドル；画像を使用する際にアクセスする（ビューそのもの）
+	std::vector<VkFramebuffer>	m_SwapChainFramebuffers;	// SwapChainのフレームバッファ
 
-	VkRenderPass				m_RenderPass;
-	VkPipelineLayout			m_PipelineLayout;
-	VkPipeline					m_GraphicsPipeline;		
+	VkRenderPass				m_RenderPass;				// レンダーパス
+	VkPipelineLayout			m_PipelineLayout;			// グラフィックスパイプラインレイアウト
+	VkPipeline					m_GraphicsPipeline;			// グラフィックスパイプライン自体
 
-	VkCommandPool					m_CommandPool;		// command pool : manages memory used to store command buffers
-	std::vector<VkCommandBuffer>	m_CommandBuffers;	// automatically freed when pool is destroyed; no cleanup required.
-
-	std::vector<VkSemaphore>		m_ImageAvailableSemaphores;	// semaphores: essentially a 'signal' used to sync operations
-	std::vector<VkSemaphore>		m_RenderFinishedSemaphores;	
-	std::vector<VkFence>			m_InFlightFences;
-	std::vector<VkFence>			m_ImagesInFlight;	
-	size_t							m_CurrentFrame = 0;
-	bool							m_FramebufferResized = false;	// if window has been resized
+	// Vulkanのあらゆるコマンド（描画、メモリ転送）などが関数で直接呼ばれません。オブジェクトと同じように
+	// コマンドバッファーを生成して、そのコマンドをコマンドバッファーに登録（格納）します。
+	// 複雑なセットアップの代わりに、コマンドが事前に処理できます。
+	VkCommandPool					m_CommandPool;		// CommandPool : コマンドバッファーのメモリ管理
+	std::vector<VkCommandBuffer>	m_CommandBuffers;	// CommandPoolを削除された同時にコマンドバッファを削除されますので
+														// コマンドバッファーのクリーンアップは不要です。
+	// Semaphore：簡単に「シグナル」。処理を同期するために利用します。
+	// Fence: GPU-CPUの間の同期機能；ゲート見たいなストッパーである。
+	std::vector<VkSemaphore>		m_ImageAvailableSemaphores;		// イメージ描画準備完了セマフォ
+	std::vector<VkSemaphore>		m_RenderFinishedSemaphores;		// レンダリング完了セマフォ
+	std::vector<VkFence>			m_InFlightFences;				// 起動中のフェンス
+	std::vector<VkFence>			m_ImagesInFlight;				// 処理中の画像
+	size_t							m_CurrentFrame = 0;				// 現在こフレームカウンター
+	bool							m_FramebufferResized = false;	// ウウィンドウサイズが変更したか
 
 	void initWindow()
 	{
-		glfwInit();			// initialize glfw
+		glfwInit();			// GLFW初期化
 
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);		// do not create an OpenGL context
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);			// window resizing test
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);		// OPENGLコンテクストを作成しない！
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);			// ユーザーでウィンドウリサイズ有効
 
-		m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);		// create window with above hint conditions
+		m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);		// 上記のパラメータでウィンドウを生成します
 		glfwSetWindowUserPointer(m_Window, this);
 		glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallback);
 	}
@@ -163,24 +200,25 @@ private:
 		app->m_FramebufferResized = true;
 	}
 
+	// Vulkanの初期化
 	void initVulkan()
 	{
-		createInstance();
-		setupDebugMessenger();
-		createSurface();
-		pickPhysicalDevice();
-		createLogicalDevice();
-		createSwapChain();
-		createImageViews();
-		createRenderPass();
-		createGraphicsPipeline();
-		createFramebuffers();
-		createCommandPool();
-		createCommandBuffers();
+		createInstance();			// インスタンス生成			
+		setupDebugMessenger();		// デバッグコールバック設定
+		createSurface();			// ウインドウサーフェス生成
+		pickPhysicalDevice();		// Vulkan対象グラフィックスカードの選択
+		createLogicalDevice();		// グラフィックスカードとインターフェースするデバイス設定
+		createSwapChain();			// SwapChain生成
+		createImageViews();			// SwapChain用の画像ビュー生成
+		createRenderPass();			// レンダーパス
+		createGraphicsPipeline();	// グラフィックスパイプライン生成
+		createFramebuffers();		// フレームバッファ生成
+		createCommandPool();		// コマンドバッファーを格納するプールを生成
+		createCommandBuffers();		// コマンドバッファー生成
 		createSyncObjects();
 	}
 
-
+	// メインループ
 	void mainLoop()
 	{
 		while (glfwWindowShouldClose(m_Window) == false)
@@ -192,7 +230,7 @@ private:
 		vkDeviceWaitIdle(m_LogicalDevice);	// let logical device finish operations before exiting the main loop 
 	}
 
-
+	// SwapChainを再生成する前に古いSwapChainを削除する関数
 	// before recreating swap chain, call this to clean up older versions of it
 	void cleanupSwapChain()
 	{
@@ -218,6 +256,7 @@ private:
 		vkDestroySwapchainKHR(m_LogicalDevice, m_SwapChain, nullptr);
 	}
 
+	// 後片づけ
 	void cleanup()
 	{
 		cleanupSwapChain();
@@ -244,39 +283,46 @@ private:
 		glfwTerminate();				// uninit glfw
 	}
 
-	// create swap chain and all creation functions for the object that depend on the swap chain or the window size.
+	// SwapChainがウィンドウサーフェスに対応していない場合（ウインドウリサイズ）、SwapChainを再生成
+	// 必要があります。SwapChain又はウィンドウサイズに依存するオブジェクトはSwapChainと同時に
+	// 再生成しないといけません。
+
+	// Recreate swap chain and all creation functions for the object that depend on the swap chain or the window size.
 	// This step is to be implemented when the swap chain is no longer compatible with the window surface;
 	// i.e. window size changing (and thus the extent values are no longer consistent)
 	void recreateSwapChain()
 	{
 		int width = 0, height = 0;
 		glfwGetFramebufferSize(m_Window, &width, &height);
-		while (width == 0 || height == 0)						// window is minimized; frame buffer size of 0
+		while (width == 0 || height == 0)						// ウィンドウが最小化状態の場合 window is minimized
 		{
-			glfwGetFramebufferSize(m_Window, &width, &height);
+			glfwGetFramebufferSize(m_Window, &width, &height);	// 最小化の場外から解除するまでウインドウ処理を一旦停止する
 			glfwWaitEvents();									// window paused until window in foreground
 		}
 
-		vkDeviceWaitIdle(m_LogicalDevice);		// do not touch resources that are still in use, wait for them to complete.
+		vkDeviceWaitIdle(m_LogicalDevice);		// 使用中のリソースの処理を終了まで待つこと。
+												// do not touch resources that are still in use, wait for them to complete.
 
-		cleanupSwapChain();
+		cleanupSwapChain();			// SwapChainの後片付け
 
-		createSwapChain();			// recreate swap chain itself
-		createImageViews();			// based directly on the swap chain images
-		createRenderPass();			// depends on the format of swap chain images
-		createGraphicsPipeline();	// Viewport and Scissor size
-		createFramebuffers();		// based directly on the swap chain images
-		createCommandBuffers();		// based directly on the swap chain images
+		createSwapChain();			// SwapChain自体を再生成
+		createImageViews();			// SwapChain内の画像に依存する
+		createRenderPass();			// SwapChain内の画像のフォーマットに依存する
+		createGraphicsPipeline();	// ビューポート、Scissorに依存する
+		createFramebuffers();		// SwapChain内の画像に依存する
+		createCommandBuffers();		// SwapChain内の画像に依存する
 	}
 
-	void createInstance()	// may provide useful information to the Vulkan driver
+	// インスタンス生成 （Vulkanドライバーに重要な情報を渡す）
+	// may provide useful information to the Vulkan driver
+	void createInstance()	
 	{
-		if (enableValidationLayers && !checkValidationLayerSupport())
+		if (enableValidationLayers && !checkValidationLayerSupport()) // デバッグモードの設定でバリデーションレイヤー機能がサポートされない場合
 		{
 			throw std::runtime_error("Validation layers requested, but not available!");
 		}
 
-		VkApplicationInfo appInfo{};								// Vulkan application info struct
+		VkApplicationInfo appInfo{};	// Vulkanアプリケーション情報構造体を生成 application info struct
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.pApplicationName = "Hello Triangle";
 		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -293,7 +339,10 @@ private:
 		createInfo.ppEnabledExtensionNames = extensions.data();
 
 		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-		if (enableValidationLayers)		// if validation layers is on (debug mode), include validation layer names in instantiation
+
+		// デバッグモードオンの場合、バリデーションレイヤー名を定義する
+		// if validation layers is on (debug mode), include validation layer names in instantiation
+		if (enableValidationLayers)		
 		{
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 			createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -307,18 +356,23 @@ private:
 			createInfo.pNext = nullptr;
 		}
 
-		VkResult result = vkCreateInstance(&createInfo, nullptr, &m_Instance);	// store result if desired, otherwise call straight w/o result variable
+		// 構造体による情報に基づいてインスタンスを生成します。
+		// Create Instance based on the info struct
+		VkResult result = vkCreateInstance(&createInfo, nullptr, &m_Instance);	
 		if (result != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create instance!");
 		}
 	}
 
+	// デバッグコールバック
+	// messageSeverity: エラーの重要さ；比較オペレータで比べられます。
+	// 例：if (messageSeverity >= VK_DEUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) の場合、そのWARNINGのレベル以上のみを表示する。
+
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,			// severity of the message; can actually be used in comparison operation
-																		// i.e. if (messageSeverity >= VK_DEUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) { //show }
+		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,		
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
-		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,		// VkDebugUtilsMesengerCallbackDataEXT struct containing message itself
+		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,		// VkDebugUtilsMesengerCallbackDataEXT メッセージ自体の構造体
 		void* pUserData)												// pointer that was specified during the setup of callback, allowing you to pass your own data to it
 	{
 		std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
@@ -341,7 +395,7 @@ private:
 
 	void setupDebugMessenger()
 	{
-		if (enableValidationLayers == false)	// only works in debug mode
+		if (enableValidationLayers == false)	// デバッグモードではない場合、無視　only works in debug mode
 			return;
 
 		VkDebugUtilsMessengerCreateInfoEXT createInfo{};
@@ -353,6 +407,8 @@ private:
 		}
 	}
 
+	// サーフェス生成（GLFW）
+	// Surface Creation
 	void createSurface()
 	{
 		if (glfwCreateWindowSurface(m_Instance, m_Window, nullptr, &m_Surface) != VK_SUCCESS)
@@ -361,21 +417,21 @@ private:
 		}
 	}
 
+	// 物理デバイス（グラフィックスカードを選択）
+	// Select compatible GPU
 	void pickPhysicalDevice()
 	{
 		uint32_t deviceCount = 0;
-		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, nullptr);
-
-		if (deviceCount == 0)		// if there are 0 devices with Vulkan support, throw error and exit
+		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, nullptr);	// Vulkan対応のデバイス（GPU)を数える
+		if (deviceCount == 0)		// 見つからなかった場合、エラー表示
 		{
 			throw std::runtime_error("Failed to find GPUs with Vulkan support!");
 		}
+		std::vector<VkPhysicalDevice> devices(deviceCount);						// 数えたGPUに基づいて物理デバイスベクトルを生成
+		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, devices.data());	// デバイス情報をベクトルに代入
 
-		std::vector<VkPhysicalDevice> devices(deviceCount);		// vector to hold all VkPhysicalDevice handles
-		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, devices.data());
-
-		for (const VkPhysicalDevice device : devices)			// evaluate each physical device if suitable for the operation to perform
-		{
+		for (const VkPhysicalDevice device : devices)		// 見つかったデバイスはやろうとしている処理に適切かどうかを確認します
+		{													// evaluate each physical device if suitable for the operation to perform
 			if (isDeviceSuitable(device) == true)
 			{
 				m_PhysicalDevice = device;
@@ -389,15 +445,16 @@ private:
 		}
 	}
 
-	void createLogicalDevice()				// Preparing logical device queue
+	// ロジカルデバイス生成
+	void createLogicalDevice()				
 	{
-		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);
+		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);	// ロジカルデバイスキュー準備　Preparing logical device queue
 
-		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;		// ロジカルデバイスキュー生成情報
 		std::set<uint32_t> uniqueQueueFamilies =
-		{ indices.graphicsFamily.value(), indices.presentFamily.value() };
+		{ indices.graphicsFamily.value(), indices.presentFamily.value() };	//　キュー種類（現在：グラフィックス、プレゼンテーション）
 
-		float queuePriority = 1.0f;
+		float queuePriority = 1.0f;		// 優先度；0.0f（低）～1.0f（高）
 		for (uint32_t queueFamily : uniqueQueueFamilies)
 		{
 			VkDeviceQueueCreateInfo queueCreateInfo{};
@@ -410,17 +467,20 @@ private:
 
 		VkPhysicalDeviceFeatures deviceFeatures{};
 
-		// Creating the logical device itself
-		VkDeviceCreateInfo createInfo{};
+
+		VkDeviceCreateInfo createInfo{};	// ロジカルデバイス生成情報構造体
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
 		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-		createInfo.pQueueCreateInfos = queueCreateInfos.data();	// pointer to the logical device queue info (above)
+		createInfo.pQueueCreateInfos = queueCreateInfos.data();	// パラメータのポインター　pointer to the logical device queue info (above)
 
 		createInfo.pEnabledFeatures = &deviceFeatures;		// currently empty (will revisit later)
 
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+
+		// デバイス専用バリデーションレイヤーとインスタンス専用バリデーションレイヤーの区別は最新バージョンでなくなりました。
+		// が、念のため古いバージョンを使っている場合、コンパティビリティのために以下の設定を定義します。
 
 		// Setting up device validation layers: This part is actually only for compatibility with older versions of Vulkan.
 		// Recent implementations have removed the distinction between instance and device-specific validation layers so
@@ -435,23 +495,30 @@ private:
 			createInfo.enabledLayerCount = 0;
 		}
 
+		// 上記のパラメータに基づいて実際のロジカルデバイスを生成する
+		// Creating the logical device itself
 		if (vkCreateDevice(m_PhysicalDevice, &createInfo, nullptr, &m_LogicalDevice) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create logical device!");
 		}
 
-		vkGetDeviceQueue(m_LogicalDevice, indices.graphicsFamily.value(), 0, &m_GraphicsQueue);		//graphics queue
-		vkGetDeviceQueue(m_LogicalDevice, indices.presentFamily.value(), 0, &m_PresentQueue);		//presentation queue
+		vkGetDeviceQueue(m_LogicalDevice, indices.graphicsFamily.value(), 0, &m_GraphicsQueue);		//　グラフィックスキュー graphics queue
+		vkGetDeviceQueue(m_LogicalDevice, indices.presentFamily.value(), 0, &m_PresentQueue);		//　プレゼンテーションキュー presentation queue
 	}
 
+	// SwapChain: 画像の切り替え
 	void createSwapChain()
 	{
+		// GPUのSwapChainサポート情報を読み込む
 		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_PhysicalDevice);
-
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
 		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+		// +1の理由：
+		// SwapChainから次のイメージを獲得する前に、たまにはドライバーの内部処理の終了を待たないといけません。
+		// そこで、余裕な1つ（以上）のイメージを用意できるように設定するのはおすすめです。
 
 		// why +1?
 		// sometimes we may have to wait on the driver to perform internal operations before we can acquire
@@ -465,7 +532,7 @@ private:
 			imageCount = swapChainSupport.capabilities.maxImageCount;
 		}
 
-		VkSwapchainCreateInfoKHR createInfo{};
+		VkSwapchainCreateInfoKHR createInfo{};		// SwapChain生成情報構造体
 		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		createInfo.surface = m_Surface;
 
@@ -473,64 +540,66 @@ private:
 		createInfo.imageFormat = surfaceFormat.format;
 		createInfo.imageColorSpace = surfaceFormat.colorSpace;
 		createInfo.imageExtent = extent;
-		createInfo.imageArrayLayers = 1;	// amount of layers each image consists of, usually 1 except stereoscopic 3d application 
-		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // what operations we'll use swap chain for 
+		createInfo.imageArrayLayers = 1;	// stereoscopic3D 以外なら「１」 
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // SwapChainを利用する処理　what operations to use swap chain for 
 
 		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);
 		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
-		if (indices.graphicsFamily != indices.presentFamily)
+		if (indices.graphicsFamily != indices.presentFamily)	//　グラフィックスとプレゼンテーションキューが異なる場合
 		{
-			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; // concurrent: can be shared across multiple queue families
+			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
+			// イメージ共有モード　Exclusive （排他的）：1つのイメージが複数のキューに所属できます。
+			// concurrent: can be shared across multiple queue families
 			createInfo.queueFamilyIndexCount = 2;
 			createInfo.pQueueFamilyIndices = queueFamilyIndices;
 		}
-		else  // graphics and presentation queue families are the same (which is the case on most hardware)
+		else  // グラフィックスとプレゼンテーションキューが同じ（現代のデバイスはこういう風に設定されています）。
 		{
-			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;	// exclusive: image is owned by one queue family at a time;
-																		// must be explicitly transferred before use in another queue
-																		// family. Offers the best performance.
+			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;	
+			// イメージ共有モード　Exclusive （排他的）：1つのイメージが1つのキュー種類しか所属しません。他のキュー種類に使用すると
+			// 所属をはっきり切り替えないといけません。パフォーマンス面で最適。
+			// exclusive: image is owned by one queue family at a time;	must be explicitly transferred before use in another queue
+			// family. Offers the best performance.
 			createInfo.queueFamilyIndexCount = 0;		// optional
 			createInfo.pQueueFamilyIndices = nullptr;	// optional
 		}
 
 		createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;	// almost always ignore alpha channel, so set to opaque
+		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;	// アルファチャンネル：不透明
 		createInfo.presentMode = presentMode;
-		createInfo.clipped = VK_TRUE;	// true : don't care about color of obscured pixels
+		createInfo.clipped = VK_TRUE;	// TRUE : オクルージョンされたピクセルの色を無視　don't care about color of obscured pixels
 
-		createInfo.oldSwapchain = VK_NULL_HANDLE;	// for now, only create one swap chain
+		createInfo.oldSwapchain = VK_NULL_HANDLE;	// 一つのSwapChainのみ　for now, only create one swap chain
 
+		// 上記の情報に基づいてSwapChainを生成します。
 		if (vkCreateSwapchainKHR(m_LogicalDevice, &createInfo, nullptr, &m_SwapChain) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create swap chain!");
 		}
 
-		vkGetSwapchainImagesKHR(m_LogicalDevice, m_SwapChain, &imageCount, nullptr);
+		vkGetSwapchainImagesKHR(m_LogicalDevice, m_SwapChain, &imageCount, nullptr);	// SwapChainのイメージ数を特定
 		m_SwapChainImages.resize(imageCount);
-		vkGetSwapchainImagesKHR(m_LogicalDevice, m_SwapChain, &imageCount, m_SwapChainImages.data());
+		vkGetSwapchainImagesKHR(m_LogicalDevice, m_SwapChain, &imageCount, m_SwapChainImages.data());	// 情報をm_SwapChainImagesに代入
 
 		m_SwapChainImageFormat = surfaceFormat.format;
 		m_SwapChainExtent = extent;
 	}
 
-
-
-
 	void createImageViews()
 	{
-		m_SwapChainImageViews.resize(m_SwapChainImages.size());		// allocate enough size to fit all image views
-
+		m_SwapChainImageViews.resize(m_SwapChainImages.size());		// イメージカウントによってベクトルサイズを変更する
+																	// allocate enough size to fit all image views 					
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
-			VkImageViewCreateInfo createInfo{};
+			VkImageViewCreateInfo createInfo{};		// イメージビュー生成構造体
 			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			createInfo.image = m_SwapChainImages[i];
 
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;	// also try 1D/3D/cube maps
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;	// 1D/3D/キューブマップなど
 			createInfo.format = m_SwapChainImageFormat;
 
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;	// default mapping
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;	// デフォルト設定　default settings
 			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -540,13 +609,13 @@ private:
 			createInfo.subresourceRange.levelCount = 1;
 			createInfo.subresourceRange.baseArrayLayer = 0;
 			createInfo.subresourceRange.layerCount = 1;
-
+			
+			// 上記の構造体の情報に基づいて実際のイメージビューを生成する
 			if (vkCreateImageView(m_LogicalDevice, &createInfo, nullptr, &m_SwapChainImageViews[i]) != VK_SUCCESS)
 			{
 				throw std::runtime_error("Failed to create image views!");
 			}
 		}
-
 	}
 
 	void createRenderPass()
@@ -604,6 +673,7 @@ private:
 		renderPassInfo.dependencyCount = 1;
 		renderPassInfo.pDependencies = &dependency;
 
+		// 上記の構造体の情報に基づいて実際のレンダーパスを生成する
 		if (vkCreateRenderPass(m_LogicalDevice, &renderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create render pass!");
