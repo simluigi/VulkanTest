@@ -4,10 +4,10 @@ Author:			Sim Luigi
 Last Modified:	2020.12.04
 
 Current Page:
-https://vulkan-tutorial.com/Drawing_a_triangle/Swap_chain_recreation
-Drawing: Swap Chain Recreation (Complete!)
+https://vulkan-tutorial.com/en/Vertex_buffers/Vertex_buffer_creation
+Vertex Buffers: Vertex buffer creation(complete!). Disabled VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT from validation layers.
 
-2020.12.04:		¡‚Ü‚Å‚Ìƒ\[ƒXƒR[ƒh‚É“ú–{ŒêƒRƒƒ“ƒg—“‚ğ’Ç‰Á‚µ‚Ü‚µ‚½B
+2020.12.06:		¡‚Ü‚Å‚Ìƒ\[ƒXƒR[ƒh‚É“ú–{ŒêƒRƒƒ“ƒg—“‚ğ’Ç‰Á‚µ‚Ü‚µ‚½B
 
 << ‹C‚Ã‚¢‚½‚±‚ÆEƒƒ‚ >>@¦ŠÔˆá‚Á‚Ä‚¢‚éê‡A‹³‚¦‚Ä‚¢‚½‚¾‚¯‚ê‚ÎK‚¢‚Å‚·B
 
@@ -34,6 +34,10 @@ Drawing: Swap Chain Recreation (Complete!)
 	‹@ŠBŒê‚Ìƒ[ƒŒƒxƒ‹ƒ‰ƒ“ƒQ[ƒW‚Å‚Í‚È‚¢‚ªAHLSL‚Æ‹@ŠBŒê‚ÌŠÔ‚ÌƒCƒ“ƒ^[ƒƒfƒBƒGƒCƒgƒŒƒxƒ‹
 	Œ¾Œê‚Æ‚µ‚ÄƒNƒƒXƒvƒ‰ƒbƒgƒtƒH[ƒ€ˆ—‚ÉŒü‚¢‚Ä‚¢‚Ü‚·B
 
+–	Vulkan‚Ì‚ ‚ç‚ä‚éƒRƒ}ƒ“ƒhi•`‰æAƒƒ‚ƒŠ“]‘—j‚È‚Ç‚ªŠÖ”‚Å’¼ÚŒÄ‚Î‚ê‚Ü‚¹‚ñBƒIƒuƒWƒFƒNƒg‚Æ“¯‚¶‚æ‚¤‚É
+	ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚ğ¶¬‚µ‚ÄA‚»‚ÌƒRƒ}ƒ“ƒh‚ğƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚É“o˜^iŠi”[j‚µ‚Ü‚·B
+	•¡G‚ÈƒZƒbƒgƒAƒbƒv‚Ì‘ã‚í‚è‚ÉAƒRƒ}ƒ“ƒh‚ª–‘O‚Éˆ—‚Å‚«‚Ü‚·B
+
 –	ƒtƒ‰ƒOƒƒ“ƒgƒVƒF[ƒ_[F@ƒsƒNƒZƒ‹ƒVƒF[ƒ_[‚Æ“¯‚¶‚Å‚·B
 
 –@Vulkan‚ÌBoolŠÖ”‚ÉŒÀ‚Á‚ÄAtrueEfalse‚Å‚Í‚È‚­AVK_TRUEEVK_FALSE‚ğg—p‚·‚é‚±‚Æ‚Å‚·B
@@ -45,15 +49,19 @@ Drawing: Swap Chain Recreation (Complete!)
 
 #include <iostream>
 #include <vector>
+#include <set>
+#include <array>
 #include <map>  
-#include <optional>			// C++17 and above
 #include <cstring>
+#include <optional>			// C++17 and above
 #include <algorithm>		// std::min/max : chooseSwapExtent()
 #include <cstdint>			// UINT32_MAX   : in chooseSwapExtent()
 #include <stdexcept>		// std::runtime errorA‚È‚Ç
 #include <cstdlib>			// EXIT_SUCCESSEEXIT_FAILURE : main()
-#include <set>
+
 #include <fstream>			// ƒVƒF[ƒ_[‚ÌƒoƒCƒiƒŠƒf[ƒ^‚ğ“Ç‚İ‚Ş@for loading shader binary data
+
+#include <glm/glm.hpp>		// glm::vec2, vec3 : Vertex\‘¢‘Ì
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -71,6 +79,76 @@ const std::vector<const char*> deviceExtensions =	// VulkanƒGƒNƒXƒeƒ“ƒVƒ‡ƒ“i¡‰
 {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME					// Œëš‚ğ”ğ‚¯‚é‚½‚ß‚Ìƒ}ƒNƒ’è‹`
 };
+
+
+struct Vertex
+{
+	glm::vec2 pos;		// glmƒ‰ƒCƒuƒ‰ƒŠ[‚ªƒVƒF[ƒ_[ƒR[ƒh‚É‡‚Á‚Ä‚éC++ƒf[ƒ^Œ^‚ğ—pˆÓ‚µ‚Ä‚­‚ê‚Ü‚·B
+	glm::vec3 color;
+
+	// ƒVƒF[ƒ_[î•ñ‚ªGPU‚É“Ç‚İ‚Ü‚ê‚½ŒãA’¸“_ƒVƒF[ƒ_[‚É“n‚·ŠÖ”2‚Â
+	// Two functions to tell Vulkan how to pass the shader data once it's been uploaded to the GPU
+ 
+	// ‡@ ’¸“_ƒoƒCƒ“ƒfƒBƒ“ƒOFî•ñ‚Ì“Ç‚İ‚Ş—¦@istride, ’¸“_‚²‚ÆEƒCƒ“ƒXƒ^ƒ“ƒX‚²‚Æj
+	// Vertex Binding: Which rate to load data from memory throughout the vertices (stride, by vertex or by instance)
+	static VkVertexInputBindingDescription getBindingDescription()
+	{
+		VkVertexInputBindingDescription bindingDescription{};
+		bindingDescription.binding = 0;									// ”z—ñ1‚Â‚¾‚¯iƒCƒ“ƒfƒbƒNƒX 0j
+		bindingDescription.stride = sizeof(Vertex);						// stride: Ÿ‚Ì—v‘f‚Ü‚Å‚ÌƒoƒCƒg”
+																		// number of bytes from one entry to the next
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;		// RATE_INSTANCEiƒCƒ“ƒXƒ^ƒ“ƒXƒŒƒ“ƒ_ƒŠƒ“ƒOj
+
+		return bindingDescription;
+	}
+
+	// ‡AƒAƒgƒŠƒrƒ…[ƒgƒfƒXƒNƒŠƒvƒ^[F’¸“_ƒoƒCƒ“ƒfƒBƒ“ƒO‚©‚ç“Ç‚İ‚ñ‚¾’¸“_ƒf[ƒ^‚Ìˆµ‚¢
+	// Attribute Descriptor: how to handle vertex input
+	static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+	{
+		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+		// attributeDescriptions[0]: Position
+		attributeDescriptions[0].binding = 0;							// bindingDescription‚Æ“¯‚¶’l same as bindingDescription value
+		attributeDescriptions[0].location = 0;							// ’¸“_ƒVƒF[ƒ_[: (location = 0) in																	
+		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;		// ƒtƒH[ƒ}ƒbƒg‚É‚Â‚¢‚ÄF
+																		// •’Ê‚ÉˆÈ‰º‚Ì‘g‚İ‡‚í‚¹‚ÅéŒ¾‚³‚ê‚Ä‚¢‚Ü‚·F
+
+																		// float : VK_FORMAT_R32_SFLOAT
+																		// vec2  : VK_FORMAT_R32G32_SFLOAT
+																		// vec3  : VK_FORMAT_R32G32B32_SFLOAT
+																		// vec4  : VK_FORMAT_R32G32B32A32_SFLOAT
+																		
+																		// ƒJƒ‰[ƒ^ƒCƒviSFLOATAUINTASINT)‚àShaderInput‚É‡‚í‚¹‚é•K—v‚ª‚ ‚è‚Ü‚·B
+
+																		// ivec2  : VK_FORMAT_R32G32_SINT		iint 32ƒrƒbƒg vec2)
+																		// uvec4  : VK_FORMAT_R32G32B32A32_UINT iunsigned 32ƒrƒbƒg vec4)
+																		// double : VK_FORMAT_R64_SFLOAT		iƒ_ƒuƒ‹ƒvƒŒƒVƒWƒ‡ƒ“64ƒrƒbƒg float
+		attributeDescriptions[0].offset = offsetof(Vertex, pos);		
+
+		// attributeDescriptions[1]: Color@iã‹L‚Æ‚Ù‚Ú“¯‚¶j
+		attributeDescriptions[1].binding = 0;
+		attributeDescriptions[1].location = 1;
+		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+		return attributeDescriptions;
+	}
+};
+
+// ’¸“_ƒf[ƒ^ƒCƒ“ƒ^[ƒŠ[ƒu
+// Vertex Attribute Interleave
+const std::vector<Vertex> vertices = 
+{
+	{{0.0f, -0.5f,}, {1.0f, 1.0f, 1.0f}},
+	{{0.5f, 0.5f,}, {0.0f, 1.0f, 0.0f}},
+	{{-0.5f, 0.5f,}, {0.0f, 0.0f, 1.0f}}
+};
+
+
+
+
+
 
 
 #ifdef NDEBUG										// NDEBUG = Not Debug	
@@ -179,12 +257,12 @@ private:
 	VkPipelineLayout			m_PipelineLayout;			// ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“ƒŒƒCƒAƒEƒg
 	VkPipeline					m_GraphicsPipeline;			// ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“©‘Ì
 
-	// Vulkan‚Ì‚ ‚ç‚ä‚éƒRƒ}ƒ“ƒhi•`‰æAƒƒ‚ƒŠ“]‘—j‚È‚Ç‚ªŠÖ”‚Å’¼ÚŒÄ‚Î‚ê‚Ü‚¹‚ñBƒIƒuƒWƒFƒNƒg‚Æ“¯‚¶‚æ‚¤‚É
-	// ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚ğ¶¬‚µ‚ÄA‚»‚ÌƒRƒ}ƒ“ƒh‚ğƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚É“o˜^iŠi”[j‚µ‚Ü‚·B
-	// •¡G‚ÈƒZƒbƒgƒAƒbƒv‚Ì‘ã‚í‚è‚ÉAƒRƒ}ƒ“ƒh‚ª–‘O‚Éˆ—‚Å‚«‚Ü‚·B
-	VkCommandPool					m_CommandPool;		// CommandPool : ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚Ìƒƒ‚ƒŠŠÇ—
-	std::vector<VkCommandBuffer>	m_CommandBuffers;	// CommandPool‚ğíœ‚³‚ê‚½“¯‚ÉƒRƒ}ƒ“ƒhƒoƒbƒtƒ@‚ğíœ‚³‚ê‚Ü‚·‚Ì‚Å
-														// ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚ÌƒNƒŠ[ƒ“ƒAƒbƒv‚Í•s—v‚Å‚·B
+	VkCommandPool					m_CommandPool;			// CommandPool : ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚Ìƒƒ‚ƒŠŠÇ—
+	std::vector<VkCommandBuffer>	m_CommandBuffers;		// CommandPool‚ğíœ‚³‚ê‚½“¯‚ÉƒRƒ}ƒ“ƒhƒoƒbƒtƒ@‚ğíœ‚³‚ê‚Ü‚·‚Ì‚Å
+															// ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚ÌƒNƒŠ[ƒ“ƒAƒbƒv‚Í•s—v‚Å‚·B
+
+	VkBuffer						m_VertexBuffer;			// ’¸“_ƒoƒbƒtƒ@[
+	VkDeviceMemory					m_VertexBufferMemory;	// ’¸“_ƒoƒbƒtƒ@[ƒƒ‚ƒŠ[Š„‚è“–‚Ä
 
 	// SemaphoreFŠÈ’P‚ÉuƒVƒOƒiƒ‹vBˆ—‚ğ“¯Šú‚·‚é‚½‚ß‚É—˜—p‚µ‚Ü‚·B
 	// Fence: GPU-CPU‚ÌŠÔ‚Ì“¯Šú‹@”\GƒQ[ƒgŒ©‚½‚¢‚ÈƒXƒgƒbƒp[‚Å‚ ‚éB
@@ -208,6 +286,7 @@ private:
 		glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallback);
 	}
 
+	// ƒŠƒTƒCƒYƒR[ƒ‹ƒoƒbƒN
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	{
 		HelloTriangleApplication* app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
@@ -228,9 +307,12 @@ private:
 		createGraphicsPipeline();	// ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“¶¬
 		createFramebuffers();		// ƒtƒŒ[ƒ€ƒoƒbƒtƒ@¶¬
 		createCommandPool();		// ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚ğŠi”[‚·‚éƒv[ƒ‹‚ğ¶¬
+		createVertexBuffer();		// ’¸“_ƒoƒbƒtƒ@[¶¬
 		createCommandBuffers();		// ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[¶¬
 		createSyncObjects();
 	}
+
+
 
 	// ƒƒCƒ“ƒ‹[ƒv
 	void mainLoop()
@@ -274,6 +356,9 @@ private:
 	void cleanup()
 	{
 		cleanupSwapChain();
+
+		vkDestroyBuffer(m_LogicalDevice, m_VertexBuffer, nullptr);
+		vkFreeMemory(m_LogicalDevice, m_VertexBufferMemory, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{		
@@ -401,7 +486,7 @@ private:
 		createInfo = {};	// empty struct
 
 		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		createInfo.messageSeverity = /*VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT|*/ VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		createInfo.pfnUserCallback = debugCallback;
 
@@ -733,10 +818,15 @@ private:
 
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};	// ’¸“_ƒCƒ“ƒvƒbƒgî•ñ\‘¢‘Ì
 		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertexInputInfo.vertexBindingDescriptionCount = 0;
-		vertexInputInfo.pVertexBindingDescriptions = nullptr;
-		vertexInputInfo.vertexAttributeDescriptionCount = 0;
-		vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+		// Vertex\‘¢‘Ì‚ÌVertexBindingDescription‚ÆVertexAttributeDescription‚ÉQÆ‚·‚é
+		auto bindingDescription = Vertex::getBindingDescription();
+		auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+		vertexInputInfo.vertexBindingDescriptionCount = 1;
+		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+		vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+		vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 		// 2.) ƒCƒ“ƒvƒbƒgƒAƒZƒ“ƒuƒŠ[F ’¸“_‚©‚ç‚Ç‚ñ‚ÈƒWƒIƒƒgƒŠ[‚ª•`‰æ‚³‚ê‚é‚©A‚»‚µ‚Äƒgƒ|ƒƒW[ƒƒ“ƒo[İ’è
 		// Input Assembly: What kind of geometry will be drawn from the vertices, topology member settings
@@ -999,6 +1089,63 @@ private:
 		}
 	}
 
+	void createVertexBuffer()
+	{
+		VkBufferCreateInfo bufferInfo{};	// ’¸“_ƒoƒbƒtƒ@[î•ñ\‘¢‘Ì
+		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+		bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;		// ƒ†[ƒXƒP[ƒXF’¸“_ƒoƒbƒtƒ@[
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;			// ‹¤—Lƒ‚[ƒhiSwapChain¶¬‚Æ“¯‚¶jF¡‰ñƒOƒ‰ƒtƒBƒbƒNƒXƒLƒ…[ê—p
+		bufferInfo.flags = 0;
+
+		// ã‹L‚Ì\‘¢‘Ì‚ÉŠî‚Ã‚¢‚ÄÀÛ‚Ì’¸“_ƒoƒbƒtƒ@[‚ğ¶¬‚µ‚Ü‚·B
+		if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &m_VertexBuffer) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create vertex buffer!");
+		}
+
+		VkMemoryRequirements memRequirements;
+		vkGetBufferMemoryRequirements(m_LogicalDevice, m_VertexBuffer, &memRequirements);
+
+		VkMemoryAllocateInfo allocInfo{};	// ƒƒ‚ƒŠ[Š„‚è“–‚Äî•ñ\‘¢‘Ì
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+		// ã‹L‚Ì\‘¢‘Ì‚ÉŠî‚Ã‚¢‚ÄÀÛ‚Ìƒƒ‚ƒŠ[Šm•Ûˆ—‚ğÀs‚µ‚Ü‚·B
+		if (vkAllocateMemory(m_LogicalDevice, &allocInfo, nullptr, &m_VertexBufferMemory) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to allocate vertex buffer memory!");
+		}
+
+		// Šm•Û‚³‚ê‚½ƒƒ‚ƒŠ[Š„‚è“–‚Ä‚ğ’¸“_ƒoƒbƒtƒ@[‚ÉƒoƒCƒ“ƒh‚µ‚Ü‚·
+		vkBindBufferMemory(m_LogicalDevice, m_VertexBuffer, m_VertexBufferMemory, 0);
+
+		void* data;	// voidƒ|ƒCƒ“ƒ^[G¡‰ñƒƒ‚ƒŠ[ƒ}ƒbƒv‚Ég—p‚µ‚Ü‚·
+		vkMapMemory(m_LogicalDevice, m_VertexBufferMemory, 0, bufferInfo.size, 0, &data);
+			memcpy(data, vertices.data(), (size_t)bufferInfo.size);
+		vkUnmapMemory(m_LogicalDevice, m_VertexBufferMemory);
+	}
+
+	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+	{
+		VkPhysicalDeviceMemoryProperties memProperties;		// ƒƒ‚ƒŠ[ƒ^ƒCƒvAƒƒ‚ƒŠ[ƒq[ƒv
+		vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
+
+		// “KØ‚Èƒƒ‚ƒŠ[ƒ^ƒCƒv‚ğŠl“¾
+		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+		{
+			if (typeFilter & (1 << i)	// corresponding bit is set to 1
+				&& (memProperties.memoryTypes[i].propertyFlags & properties) == properties)	// bitwise AND ˜_—Ï == ˆø” properties
+			{
+				return i;
+			}
+		}
+
+		throw std::runtime_error("Failed to find suitable memory type!");
+	}
+
 	void createCommandBuffers()
 	{
 		m_CommandBuffers.resize(m_SwapChainFramebuffers.size());	// ƒtƒŒ[ƒ€ƒoƒbƒtƒ@[ƒTƒCƒY‚É‡‚í‚¹‚é
@@ -1059,8 +1206,13 @@ private:
 			// ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“‚Æ‚Â‚È‚¬‚Ü‚·B
 			vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
 
+			// ’¸“_ƒoƒbƒtƒ@[î•ñ‚ğƒoƒCƒ“ƒh‚µ‚½‚ç•`‰æ‚Ì€”õ‚ÍŠ®¬‚Å‚·B
+			VkBuffer vertexBuffers[] = { m_VertexBuffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, vertexBuffers, offsets);
+
 			// •`‰æƒRƒ}ƒ“ƒh
-			vkCmdDraw(m_CommandBuffers[i], 3, 1, 0, 0);
+			vkCmdDraw(m_CommandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 			// ˆø”‡@FƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[
 			// @@‡AF’¸“_”i’¸“_ƒoƒbƒtƒ@[‚È‚µ‚Å‚à’¸“_‚ğ•`‰æ‚µ‚Ä‚¢‚Ü‚·Bj
 			// @@‡BFƒCƒ“ƒXƒ^ƒ“ƒX”iƒCƒ“ƒXƒ^ƒ“ƒXƒŒƒ“ƒ_ƒŠƒ“ƒO—pj
