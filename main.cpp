@@ -53,29 +53,30 @@ Vertex Buffers: Vertex buffer creation(complete!). Disabled VK_DEBUG_UTILS_MESSA
 #include <array>
 #include <map>  
 #include <cstring>
-#include <optional>			// C++17 and above
-#include <algorithm>		// std::min/max : chooseSwapExtent()
-#include <cstdint>			// UINT32_MAX   : in chooseSwapExtent()
-#include <stdexcept>		// std::runtime errorA‚È‚Ç
-#include <cstdlib>			// EXIT_SUCCESSEEXIT_FAILURE : main()
-
-#include <fstream>			// ƒVƒF[ƒ_[‚ÌƒoƒCƒiƒŠƒf[ƒ^‚ğ“Ç‚İ‚Ş@for loading shader binary data
-
-#include <glm/glm.hpp>		// glm::vec2, vec3 : Vertex\‘¢‘Ì
+#include <optional>		// C++17 and above
+#include <algorithm>	// std::min/max : chooseSwapExtent()
+#include <cstdint>		// UINT32_MAX   : in chooseSwapExtent()
+#include <stdexcept>	// std::runtime errorA‚È‚Ç
+#include <cstdlib>		// EXIT_SUCCESSEEXIT_FAILURE : main()
+#include <fstream>		// ƒVƒF[ƒ_[‚ÌƒoƒCƒiƒŠƒf[ƒ^‚ğ“Ç‚İ‚Ş@for loading shader binary data
+#include <glm/glm.hpp>	// glm::vec2, vec3 : Vertex\‘¢‘Ì
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const int MAX_FRAMES_IN_FLIGHT = 2;		// “¯‚Éˆ—‚³‚ê‚éƒtƒŒ[ƒ€‚ÌÅ‘å”
-										// how many frames should be processed concurrently 
+// “¯‚Éˆ—‚³‚ê‚éƒtƒŒ[ƒ€‚ÌÅ‘å” 
+// how many frames should be processed concurrently 
+const int MAX_FRAMES_IN_FLIGHT = 2;		
 
-const std::vector<const char*> validationLayers =	// Vulkan‚ÌƒoƒŠƒf[ƒVƒ‡ƒ“ƒŒƒCƒ„[FSDKã‚ÌƒGƒ‰[ƒ`ƒFƒbƒNd‘g‚İ
-													// Vulkan Validation layers: SDK's own error checking implementation
+// Vulkan‚ÌƒoƒŠƒf[ƒVƒ‡ƒ“ƒŒƒCƒ„[FSDKã‚ÌƒGƒ‰[ƒ`ƒFƒbƒNd‘g‚İ
+// Vulkan Validation layers: SDK's own error checking implementation
+const std::vector<const char*> validationLayers =				
 {
 	"VK_LAYER_KHRONOS_validation"
 };
 
-const std::vector<const char*> deviceExtensions =	// VulkanƒGƒNƒXƒeƒ“ƒVƒ‡ƒ“i¡‰ñ‚ÍSwapChain)
+// VulkanƒGƒNƒXƒeƒ“ƒVƒ‡ƒ“i¡‰ñ‚ÍSwapChain)
+const std::vector<const char*> deviceExtensions =
 {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME					// Œëš‚ğ”ğ‚¯‚é‚½‚ß‚Ìƒ}ƒNƒ’è‹`
 };
@@ -83,7 +84,8 @@ const std::vector<const char*> deviceExtensions =	// VulkanƒGƒNƒXƒeƒ“ƒVƒ‡ƒ“i¡‰
 
 struct Vertex
 {
-	glm::vec2 pos;		// glmƒ‰ƒCƒuƒ‰ƒŠ[‚ªƒVƒF[ƒ_[ƒR[ƒh‚É‡‚Á‚Ä‚éC++ƒf[ƒ^Œ^‚ğ—pˆÓ‚µ‚Ä‚­‚ê‚Ü‚·B
+	// glmƒ‰ƒCƒuƒ‰ƒŠ[‚ªƒVƒF[ƒ_[ƒR[ƒh‚É‡‚Á‚Ä‚éC++ƒf[ƒ^Œ^‚ğ—pˆÓ‚µ‚Ä‚­‚ê‚Ü‚·B
+	glm::vec2 pos;		
 	glm::vec3 color;
 
 	// ƒVƒF[ƒ_[î•ñ‚ªGPU‚É“Ç‚İ‚Ü‚ê‚½ŒãA’¸“_ƒVƒF[ƒ_[‚É“n‚·ŠÖ”2‚Â
@@ -94,10 +96,16 @@ struct Vertex
 	static VkVertexInputBindingDescription getBindingDescription()
 	{
 		VkVertexInputBindingDescription bindingDescription{};
-		bindingDescription.binding = 0;									// ”z—ñ1‚Â‚¾‚¯iƒCƒ“ƒfƒbƒNƒX 0j
-		bindingDescription.stride = sizeof(Vertex);						// stride: Ÿ‚Ì—v‘f‚Ü‚Å‚ÌƒoƒCƒg”
-																		// number of bytes from one entry to the next
-		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;		// RATE_INSTANCEiƒCƒ“ƒXƒ^ƒ“ƒXƒŒƒ“ƒ_ƒŠƒ“ƒOj
+
+		// ”z—ñ1‚Â‚¾‚¯iƒCƒ“ƒfƒbƒNƒX 0j
+		bindingDescription.binding = 0;
+
+		// stride: Ÿ‚Ì—v‘f‚Ü‚Å‚ÌƒoƒCƒg”
+		// number of bytes from one entry to the next
+		bindingDescription.stride = sizeof(Vertex);
+
+		// RATE_INSTANCEiƒCƒ“ƒXƒ^ƒ“ƒXƒŒƒ“ƒ_ƒŠƒ“ƒOj
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
 		return bindingDescription;
 	}
@@ -108,25 +116,25 @@ struct Vertex
 	{
 		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
 
-		// attributeDescriptions[0]: Position
-		attributeDescriptions[0].binding = 0;							// bindingDescription‚Æ“¯‚¶’l same as bindingDescription value
-		attributeDescriptions[0].location = 0;							// ’¸“_ƒVƒF[ƒ_[: (location = 0) in																	
-		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;		// ƒtƒH[ƒ}ƒbƒg‚É‚Â‚¢‚ÄF
-																		// •’Ê‚ÉˆÈ‰º‚Ì‘g‚İ‡‚í‚¹‚ÅéŒ¾‚³‚ê‚Ä‚¢‚Ü‚·F
+		// attributeDescriptions[0]: ˆÊ’uî•ñ@Position
+		// bindingDescription‚Æ“¯‚¶’l: ’¸“_ƒVƒF[ƒ_[ (location = 0) in	
+		attributeDescriptions[0].binding = 0;							
+		attributeDescriptions[0].location = 0;																							
+		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;		
+		attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
-																		// float : VK_FORMAT_R32_SFLOAT
-																		// vec2  : VK_FORMAT_R32G32_SFLOAT
-																		// vec3  : VK_FORMAT_R32G32B32_SFLOAT
-																		// vec4  : VK_FORMAT_R32G32B32A32_SFLOAT
+		// ƒtƒH[ƒ}ƒbƒg‚É‚Â‚¢‚ÄF	// •’Ê‚ÉˆÈ‰º‚Ì‘g‚İ‡‚í‚¹‚ÅéŒ¾‚³‚ê‚Ä‚¢‚Ü‚·B															
+		// float : VK_FORMAT_R32_SFLOAT
+		// vec2  : VK_FORMAT_R32G32_SFLOAT
+		// vec3  : VK_FORMAT_R32G32B32_SFLOAT
+		// vec4  : VK_FORMAT_R32G32B32A32_SFLOAT
 																		
-																		// ƒJƒ‰[ƒ^ƒCƒviSFLOATAUINTASINT)‚àShaderInput‚É‡‚í‚¹‚é•K—v‚ª‚ ‚è‚Ü‚·B
-
-																		// ivec2  : VK_FORMAT_R32G32_SINT		iint 32ƒrƒbƒg vec2)
-																		// uvec4  : VK_FORMAT_R32G32B32A32_UINT iunsigned 32ƒrƒbƒg vec4)
-																		// double : VK_FORMAT_R64_SFLOAT		iƒ_ƒuƒ‹ƒvƒŒƒVƒWƒ‡ƒ“64ƒrƒbƒg float
-		attributeDescriptions[0].offset = offsetof(Vertex, pos);		
-
-		// attributeDescriptions[1]: Color@iã‹L‚Æ‚Ù‚Ú“¯‚¶j
+		// ƒJƒ‰[ƒ^ƒCƒviSFLOATAUINTASINT)‚àShaderInput‚É‡‚í‚¹‚é•K—v‚ª‚ ‚è‚Ü‚·B
+		// ivec2  : VK_FORMAT_R32G32_SINT		iint 32ƒrƒbƒg vec2)
+		// uvec4  : VK_FORMAT_R32G32B32A32_UINT iunsigned 32ƒrƒbƒg vec4)
+		// double : VK_FORMAT_R64_SFLOAT		iƒ_ƒuƒ‹ƒvƒŒƒVƒWƒ‡ƒ“64ƒrƒbƒg float
+		
+		// attributeDescriptions[1]: ƒJƒ‰[î•ñ@Color@iã‹L‚Æ‚Ù‚Ú“¯‚¶j
 		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -150,27 +158,31 @@ const std::vector<Vertex> vertices =
 
 
 
-
-#ifdef NDEBUG										// NDEBUG = Not Debug	
-const bool enableValidationLayers = false;			// ƒoƒŠƒf[ƒVƒ‡ƒ“ƒŒƒCƒ„[–³Œø
+// NDEBUG = Not Debug	
+#ifdef NDEBUG					
+// ƒoƒŠƒf[ƒVƒ‡ƒ“ƒŒƒCƒ„[–³Œø
+const bool enableValidationLayers = false;
 #else
-const bool enableValidationLayers = true;			// ƒoƒŠƒf[ƒVƒ‡ƒ“ƒŒƒCƒ„[—LŒø
+// ƒoƒŠƒf[ƒVƒ‡ƒ“ƒŒƒCƒ„[—LŒø
+const bool enableValidationLayers = true;
 #endif
 
 // ƒfƒoƒbƒO‹@”\¶¬EíœŠÖ”‚ÍƒNƒ‰ƒXŠO–”‚ÍƒXƒ^ƒeƒBƒbƒN‚Åİ’è‚µ‚È‚¢‚Æ‚¢‚¯‚Ü‚¹‚ñB
 // create/destroy debug functions must either be a static class function or function outside the class
 
 // ƒfƒoƒbƒOƒƒbƒZƒ“ƒWƒƒ[¶¬
-VkResult CreateDebugUtilsMessengerEXT(	// ƒGƒNƒXƒeƒ“ƒVƒ‡ƒ“ŠÖ”F©“®“I‚Éƒ[ƒh‚³‚ê‚Ä‚¢‚Ü‚¹‚ñB
-										// ŠÖ”ƒAƒhƒŒƒX‚ğvkGetInstanceProcedureAddr()‚Å“Á’è‚Å‚«‚Ü‚·B
-										// extension function; not automatically loaded. Need to specify address via	
-										// vkGetInstanceProcedureAddr()
+// ƒGƒNƒXƒeƒ“ƒVƒ‡ƒ“ŠÖ”F©“®“I‚Éƒ[ƒh‚³‚ê‚Ä‚¢‚Ü‚¹‚ñB
+// ŠÖ”ƒAƒhƒŒƒX‚ğvkGetInstanceProcedureAddr()‚Å“Á’è‚Å‚«‚Ü‚·B
+// extension function; not automatically loaded. Need to specify address via	
+// vkGetInstanceProcedureAddr()
+VkResult CreateDebugUtilsMessengerEXT(
 	VkInstance instance,
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 	const VkAllocationCallbacks* pAllocator,
 	VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
-	PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+	PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr
+		(instance, "vkCreateDebugUtilsMessengerEXT");
 	if (func != nullptr)
 	{
 		return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
@@ -199,10 +211,15 @@ struct QueueFamilyIndices
 {
 	// optional: î•ñ‚ª‘¶İ‚µ‚Ä‚¢‚é‚©‚µ‚Ä‚¢‚È‚¢‚©‚ÌƒRƒ“ƒeƒii‚Ç‚¿‚ç‚Å‚à‰Â”\j
 	// optional: optional contained value; value MAY or MAY NOT be present. (C++17)
-	std::optional<uint32_t> graphicsFamily;		// ƒOƒ‰ƒtƒBƒbƒNŒnƒLƒ…[@graphics family	
-	std::optional<uint32_t> presentFamily;		// ƒvƒŒƒ[ƒ“ƒe[ƒVƒ‡ƒ“i•`‰æjƒLƒ…[@presentation family
 
-	bool isComplete()							// ƒLƒ…[‚ÌŠe’l‚ª‚¿‚á‚ñ‚Æ‘¶İ‚µ‚Ä‚¢‚é‚©@check if value exists for all values
+	// ƒOƒ‰ƒtƒBƒbƒNŒnƒLƒ…[
+	std::optional<uint32_t> graphicsFamily;	
+
+	// ƒvƒŒƒ[ƒ“ƒgi•`‰æjƒLƒ…[
+	std::optional<uint32_t> presentFamily;		
+
+	// ƒLƒ…[‚ÌŠe’l‚ª‚¿‚á‚ñ‚Æ‘¶İ‚µ‚Ä‚¢‚é‚©@check if value exists for all values
+	bool isComplete()							
 	{
 		return graphicsFamily.has_value() && presentFamily.has_value();
 	}
@@ -232,47 +249,48 @@ public:
 
 private:
 
-	GLFWwindow*					m_Window;			// WINDOWS‚Å‚Í‚È‚­GLFW;@ƒNƒƒXƒvƒ‰ƒbƒgƒtƒH[ƒ€‚ÌÀ‘•
+	GLFWwindow* m_Window;  // WINDOWS‚Å‚Í‚È‚­GLFW;@ƒNƒƒXƒvƒ‰ƒbƒgƒtƒH[ƒ€‘Î‰
+	VkInstance m_Instance; // ƒCƒ“ƒXƒ^ƒ“ƒXFƒAƒvƒŠƒP[ƒVƒ‡ƒ“‚ÆSDK‚Ì‚Â‚È‚ª‚è
+	
+	VkDebugUtilsMessengerEXT m_DebugMessenger;	// ƒfƒoƒbƒOƒR[ƒ‹ƒoƒbƒN
+	
+	VkSurfaceKHR m_Surface;	// GLFW -> WSI (Windows System Integration) -> ƒEƒBƒ“ƒhƒE¶¬
 
-	VkInstance					m_Instance;			// ƒCƒ“ƒXƒ^ƒ“ƒXFƒAƒvƒŠƒP[ƒVƒ‡ƒ“‚ÆSDK‚Ì‚Â‚È‚ª‚è
-	VkDebugUtilsMessengerEXT	m_DebugMessenger;	// ƒfƒoƒbƒOƒR[ƒ‹ƒoƒbƒN
-	VkSurfaceKHR				m_Surface;			// GLFW -> Windows System Integration -> Window
+	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;	// •¨—ƒfƒoƒCƒXiGPUEƒOƒ‰ƒtƒBƒbƒNƒXƒJ[ƒhj
+	VkDevice m_LogicalDevice; // •¨—ƒfƒoƒCƒX‚Æ‚ÌƒVƒXƒeƒ€ƒCƒ“ƒ^[ƒtƒF[ƒX
 
-	VkPhysicalDevice			m_PhysicalDevice = VK_NULL_HANDLE;	// •¨—ƒfƒoƒCƒXiƒOƒ‰ƒtƒBƒbƒNƒXƒJ[ƒhj
+	VkQueue m_GraphicsQueue; // ƒOƒ‰ƒtƒBƒbƒNƒXê—pƒLƒ…[
+	VkQueue m_PresentQueue; // ƒvƒŒƒ[ƒ“ƒgi•`‰æjê—pƒLƒ…[
 
-	VkDevice					m_LogicalDevice;	// •¨—ƒfƒoƒCƒX‚Æ‚ÌƒVƒXƒeƒ€ƒCƒ“ƒ^[ƒtƒF[ƒX
+	VkSwapchainKHR m_SwapChain;	// •\¦‚·‚é—\’è‚Ì‰æ‘œ‚ÌƒLƒ…[
+	std::vector<VkImage> m_SwapChainImages;	// ƒLƒ…[‰æ‘œ
+	VkFormat m_SwapChainImageFormat; // ‰æ‘œƒtƒH[ƒ}ƒbƒg
+	VkExtent2D m_SwapChainExtent; // extent : ‰æ‘œƒŒƒ]ƒ‹[ƒVƒ‡ƒ“i’ÊíAƒEƒBƒ“ƒhƒE‚Æ“¯‚¶j
 
-	VkQueue						m_GraphicsQueue;	// ƒOƒ‰ƒtƒBƒbƒNƒXê—pƒLƒ…[
-	VkQueue						m_PresentQueue;		// ƒvƒŒƒ[ƒ“ƒe[ƒVƒ‡ƒ“ê—pƒLƒ…[
+	std::vector<VkImageView> m_SwapChainImageViews; // VkImage‚Ìƒnƒ“ƒhƒ‹G‰æ‘œ‚ğg—p‚·‚éÛ‚ÉƒAƒNƒZƒX‚·‚éiƒrƒ…[‚»‚Ì‚à‚Ìj
+	std::vector<VkFramebuffer> m_SwapChainFramebuffers; // SwapChain‚ÌƒtƒŒ[ƒ€ƒoƒbƒtƒ@
 
-	VkSwapchainKHR				m_SwapChain;				// •\¦‚·‚é—\’è‚Ì‰æ‘œ‚ÌƒLƒ…[
-	std::vector<VkImage>		m_SwapChainImages;			// ƒLƒ…[‰æ‘œ
-	VkFormat					m_SwapChainImageFormat;		// ‰æ‘œƒtƒH[ƒ}ƒbƒg
-	VkExtent2D					m_SwapChainExtent;			// extent : ‰æ‘œƒŒƒ]ƒ‹[ƒVƒ‡ƒ“i’ÊíAƒEƒBƒ“ƒhƒE‚Æ“¯‚¶j
+	VkRenderPass m_RenderPass; // ƒŒƒ“ƒ_[ƒpƒX
+	VkPipelineLayout m_PipelineLayout; // ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“ƒŒƒCƒAƒEƒg
+	VkPipeline m_GraphicsPipeline; // ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“©‘Ì
 
-	std::vector<VkImageView>	m_SwapChainImageViews;		// VkImage‚Ìƒnƒ“ƒhƒ‹G‰æ‘œ‚ğg—p‚·‚éÛ‚ÉƒAƒNƒZƒX‚·‚éiƒrƒ…[‚»‚Ì‚à‚Ìj
-	std::vector<VkFramebuffer>	m_SwapChainFramebuffers;	// SwapChain‚ÌƒtƒŒ[ƒ€ƒoƒbƒtƒ@
+	VkCommandPool m_CommandPool; // CommandPool : ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚Ìƒƒ‚ƒŠŠÇ—
 
-	VkRenderPass				m_RenderPass;				// ƒŒƒ“ƒ_[ƒpƒX
-	VkPipelineLayout			m_PipelineLayout;			// ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“ƒŒƒCƒAƒEƒg
-	VkPipeline					m_GraphicsPipeline;			// ƒOƒ‰ƒtƒBƒbƒNƒXƒpƒCƒvƒ‰ƒCƒ“©‘Ì
+	// CommandPool‚ğíœ‚³‚ê‚½“¯‚ÉƒRƒ}ƒ“ƒhƒoƒbƒtƒ@‚ğíœ‚³‚ê‚Ü‚·‚Ì‚ÅƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚ÌƒNƒŠ[ƒ“ƒAƒbƒv‚Í•s—v‚Å‚·B
+	std::vector<VkCommandBuffer> m_CommandBuffers;		
 
-	VkCommandPool					m_CommandPool;			// CommandPool : ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚Ìƒƒ‚ƒŠŠÇ—
-	std::vector<VkCommandBuffer>	m_CommandBuffers;		// CommandPool‚ğíœ‚³‚ê‚½“¯‚ÉƒRƒ}ƒ“ƒhƒoƒbƒtƒ@‚ğíœ‚³‚ê‚Ü‚·‚Ì‚Å
-															// ƒRƒ}ƒ“ƒhƒoƒbƒtƒ@[‚ÌƒNƒŠ[ƒ“ƒAƒbƒv‚Í•s—v‚Å‚·B
-
-	VkBuffer						m_VertexBuffer;			// ’¸“_ƒoƒbƒtƒ@[
-	VkDeviceMemory					m_VertexBufferMemory;	// ’¸“_ƒoƒbƒtƒ@[ƒƒ‚ƒŠ[Š„‚è“–‚Ä
+	VkBuffer m_VertexBuffer; // ’¸“_ƒoƒbƒtƒ@[
+	VkDeviceMemory m_VertexBufferMemory; // ’¸“_ƒoƒbƒtƒ@[ƒƒ‚ƒŠ[Š„‚è“–‚Ä
 
 	// SemaphoreFŠÈ’P‚ÉuƒVƒOƒiƒ‹vBˆ—‚ğ“¯Šú‚·‚é‚½‚ß‚É—˜—p‚µ‚Ü‚·B
 	// Fence: GPU-CPU‚ÌŠÔ‚Ì“¯Šú‹@”\GƒQ[ƒgŒ©‚½‚¢‚ÈƒXƒgƒbƒp[‚Å‚ ‚éB
-	std::vector<VkSemaphore>		m_ImageAvailableSemaphores;		// ƒCƒ[ƒW•`‰æ€”õŠ®—¹ƒZƒ}ƒtƒH
-	std::vector<VkSemaphore>		m_RenderFinishedSemaphores;		// ƒŒƒ“ƒ_ƒŠƒ“ƒOŠ®—¹ƒZƒ}ƒtƒH
-	std::vector<VkFence>			m_InFlightFences;				// ‹N“®’†‚ÌƒtƒFƒ“ƒX
-	std::vector<VkFence>			m_ImagesInFlight;				// ˆ—’†‚Ì‰æ‘œ
-	size_t							m_CurrentFrame = 0;				// Œ»İ‚±ƒtƒŒ[ƒ€ƒJƒEƒ“ƒ^[
+	std::vector<VkSemaphore>		m_ImageAvailableSemaphores; // ƒCƒ[ƒW•`‰æ€”õŠ®—¹ƒZƒ}ƒtƒH
+	std::vector<VkSemaphore>		m_RenderFinishedSemaphores; // ƒŒƒ“ƒ_ƒŠƒ“ƒOŠ®—¹ƒZƒ}ƒtƒH
+	std::vector<VkFence>			m_InFlightFences; // ‹N“®’†‚ÌƒtƒFƒ“ƒX
+	std::vector<VkFence>			m_ImagesInFlight; // ˆ—’†‚Ì‰æ‘œ
+	size_t							m_CurrentFrame = 0; // Œ»İ‚±ƒtƒŒ[ƒ€ƒJƒEƒ“ƒ^[
 	
-	bool							m_FramebufferResized = false;	// ƒEƒEƒBƒ“ƒhƒEƒTƒCƒY‚ª•ÏX‚µ‚½‚©
+	bool m_FramebufferResized = false; // ƒEƒEƒBƒ“ƒhƒEƒTƒCƒY‚ª•ÏX‚µ‚½‚©
 
 	void initWindow()
 	{
