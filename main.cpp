@@ -249,23 +249,23 @@ public:
 
 private:
 
-	GLFWwindow* m_Window;  // WINDOWSではなくGLFW;　クロスプラットフォーム対応
-	VkInstance m_Instance; // インスタンス：アプリケーションとSDKのつながり
+	GLFWwindow* m_Window;    // WINDOWSではなくGLFW;　クロスプラットフォーム対応
+	VkInstance m_Instance;   // インスタンス：アプリケーションとSDKのつながり
 	
-	VkDebugUtilsMessengerEXT m_DebugMessenger;	// デバッグコールバック
+	VkDebugUtilsMessengerEXT m_DebugMessenger;   // デバッグコールバック
 	
-	VkSurfaceKHR m_Surface;	// GLFW -> WSI (Windows System Integration) -> ウィンドウ生成
+	VkSurfaceKHR m_Surface;    // GLFW -> WSI (Windows System Integration) -> ウィンドウ生成
 
-	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;	// 物理デバイス（GPU・グラフィックスカード）
-	VkDevice m_LogicalDevice; // 物理デバイスとのシステムインターフェース
+	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;    // 物理デバイス（GPU・グラフィックスカード）
+	VkDevice m_LogicalDevice;                              // 物理デバイスとのシステムインターフェース
 
-	VkQueue m_GraphicsQueue; // グラフィックス専用キュー
-	VkQueue m_PresentQueue; // プレゼント（描画）専用キュー
+	VkQueue m_GraphicsQueue;    // グラフィックス専用キュー
+	VkQueue m_PresentQueue;     // プレゼント（描画）専用キュー
 
-	VkSwapchainKHR m_SwapChain;	// 表示する予定の画像のキュー
+	VkSwapchainKHR m_SwapChain;	            // 表示する予定の画像のキュー
 	std::vector<VkImage> m_SwapChainImages;	// キュー画像
-	VkFormat m_SwapChainImageFormat; // 画像フォーマット
-	VkExtent2D m_SwapChainExtent; // extent : 画像レゾルーション（通常、ウィンドウと同じ）
+	VkFormat m_SwapChainImageFormat;        // 画像フォーマット
+	VkExtent2D m_SwapChainExtent;           // extent : 画像レゾルーション（通常、ウィンドウと同じ）
 
 	std::vector<VkImageView> m_SwapChainImageViews; // VkImageのハンドル；画像を使用する際にアクセスする（ビューそのもの）
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers; // SwapChainのフレームバッファ
