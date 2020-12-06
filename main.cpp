@@ -262,35 +262,35 @@ private:
 	VkQueue m_GraphicsQueue;    // グラフィックス専用キュー
 	VkQueue m_PresentQueue;     // プレゼント（描画）専用キュー
 
-	VkSwapchainKHR m_SwapChain;	            // 表示する予定の画像のキュー
-	std::vector<VkImage> m_SwapChainImages;	// キュー画像
-	VkFormat m_SwapChainImageFormat;        // 画像フォーマット
-	VkExtent2D m_SwapChainExtent;           // extent : 画像レゾルーション（通常、ウィンドウと同じ）
+	VkSwapchainKHR m_SwapChain;                // 表示する予定の画像のキュー
+	std::vector<VkImage> m_SwapChainImages;	   // キュー画像
+	VkFormat m_SwapChainImageFormat;           // 画像フォーマット
+	VkExtent2D m_SwapChainExtent;              // extent : 画像レゾルーション（通常、ウィンドウと同じ）
 
-	std::vector<VkImageView> m_SwapChainImageViews; // VkImageのハンドル；画像を使用する際にアクセスする（ビューそのもの）
-	std::vector<VkFramebuffer> m_SwapChainFramebuffers; // SwapChainのフレームバッファ
+	std::vector<VkImageView> m_SwapChainImageViews;        // VkImageのハンドル；画像を使用する際にアクセスする（ビューそのもの）
+	std::vector<VkFramebuffer> m_SwapChainFramebuffers;    // SwapChainのフレームバッファ
 
-	VkRenderPass m_RenderPass; // レンダーパス
-	VkPipelineLayout m_PipelineLayout; // グラフィックスパイプラインレイアウト
-	VkPipeline m_GraphicsPipeline; // グラフィックスパイプライン自体
+	VkRenderPass m_RenderPass;            // レンダーパス
+	VkPipelineLayout m_PipelineLayout;    // グラフィックスパイプラインレイアウト
+	VkPipeline m_GraphicsPipeline;        // グラフィックスパイプライン自体
 
-	VkCommandPool m_CommandPool; // CommandPool : コマンドバッファーのメモリ管理
+	VkCommandPool m_CommandPool;    // CommandPool : コマンドバッファーのメモリ管理
 
 	// CommandPoolを削除された同時にコマンドバッファを削除されますのでコマンドバッファーのクリーンアップは不要です。
 	std::vector<VkCommandBuffer> m_CommandBuffers;		
 
-	VkBuffer m_VertexBuffer; // 頂点バッファー
-	VkDeviceMemory m_VertexBufferMemory; // 頂点バッファーメモリー割り当て
+	VkBuffer m_VertexBuffer;                // 頂点バッファー
+	VkDeviceMemory m_VertexBufferMemory;    // 頂点バッファーメモリー割り当て
 
 	// Semaphore：簡単に「シグナル」。処理を同期するために利用します。
 	// Fence: GPU-CPUの間の同期機能；ゲート見たいなストッパーである。
-	std::vector<VkSemaphore>		m_ImageAvailableSemaphores; // イメージ描画準備完了セマフォ
-	std::vector<VkSemaphore>		m_RenderFinishedSemaphores; // レンダリング完了セマフォ
-	std::vector<VkFence>			m_InFlightFences; // 起動中のフェンス
-	std::vector<VkFence>			m_ImagesInFlight; // 処理中の画像
-	size_t							m_CurrentFrame = 0; // 現在こフレームカウンター
+	std::vector<VkSemaphore>    m_ImageAvailableSemaphores;    // イメージ描画準備完了セマフォ
+	std::vector<VkSemaphore>    m_RenderFinishedSemaphores;    // レンダリング完了セマフォ
+	std::vector<VkFence>        m_InFlightFences;              // 起動中のフェンス
+	std::vector<VkFence>        m_ImagesInFlight;              // 処理中の画像
+	size_t                      m_CurrentFrame = 0;            // 現在こフレームカウンター
 	
-	bool m_FramebufferResized = false; // ウウィンドウサイズが変更したか
+	bool m_FramebufferResized = false;    // ウウィンドウサイズが変更したか
 
 	void initWindow()
 	{
