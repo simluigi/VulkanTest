@@ -536,8 +536,8 @@ private:
 		std::vector<VkPhysicalDevice> devices(deviceCount);                     // 数えたGPUに基づいて物理デバイスベクトルを生成
 		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, devices.data());   // デバイス情報をベクトルに代入
 
-		for (const VkPhysicalDevice device : devices)       // 見つかったデバイスはやろうとしている処理に適切かどうかを確認します
-		{                                                    // evaluate each physical device if suitable for the operation to perform
+		for (const VkPhysicalDevice device : devices)     // 見つかったデバイスはやろうとしている処理に適切かどうかを確認します
+		{                                                 // evaluate each physical device if suitable for the operation to perform
 			if (isDeviceSuitable(device) == true)
 			{
 				m_PhysicalDevice = device;
@@ -646,27 +646,30 @@ private:
 		createInfo.imageFormat = surfaceFormat.format;
 		createInfo.imageColorSpace = surfaceFormat.colorSpace;
 		createInfo.imageExtent = extent;
-		createInfo.imageArrayLayers = 1;                             // stereoscopic3D 以外なら「１」 
-		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // SwapChainを利用する処理　what operations to use swap chain for 
+		createInfo.imageArrayLayers = 1;                                // stereoscopic3D 以外なら「１」 
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;    // SwapChainを利用する処理　what operations to use swap chain for 
 
 		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);
 		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
 		if (indices.graphicsFamily != indices.presentFamily)    // グラフィックスとプレゼンテーションキューが異なる場合
 		{
-			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
-			// イメージ共有モード　Exclusive （排他的）：1つのイメージが複数のキューに所属できます。
+			// イメージ共有モードについて： Regarding imageSharingMode
+			
+			// VK_SHARING_MODE_EXCLUSIVE （排他的）：1つのイメージが1つのキュー種類しか所属できません
+			// 他のキュー種類に使用すると 所属をはっきり切り替えないといけません。パフォーマンス面で最適
+			// exclusive: image is owned by one queue family at a time;	must be explicitly transferred before use in another queue
+			// family. Offers the best performance.
+
+			// VK_SHARING_MODE_CONCURRENT（同時）　：1つのイメージが複数のキュー種類に所属できます
 			// concurrent: can be shared across multiple queue families
+			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
 			createInfo.queueFamilyIndexCount = 2;
 			createInfo.pQueueFamilyIndices = queueFamilyIndices;
 		}
 		else    // グラフィックスとプレゼンテーションキューが同じ（現代のデバイスはこういう風に設定されています）。
 		{
 			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;	
-			// イメージ共有モード　Exclusive （排他的）：1つのイメージが1つのキュー種類しか所属しません。他のキュー種類に使用すると
-			// 所属をはっきり切り替えないといけません。パフォーマンス面で最適。
-			// exclusive: image is owned by one queue family at a time;	must be explicitly transferred before use in another queue
-			// family. Offers the best performance.
 			createInfo.queueFamilyIndexCount = 0;        // 任意 optional
 			createInfo.pQueueFamilyIndices = nullptr;    // 任意 optional
 		}
@@ -696,14 +699,14 @@ private:
 		m_SwapChainImageViews.resize(m_SwapChainImages.size());    // イメージカウントによってベクトルサイズを変更する allocate enough size to fit all image views 					
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
-			VkImageViewCreateInfo createInfo{};    // イメージビュー生成構造体
+			VkImageViewCreateInfo createInfo{};                            // イメージビュー生成構造体
 			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			createInfo.image = m_SwapChainImages[i];
 
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;    // 1D/3D/キューブマップなど
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;                   // 1D/3D/キューブマップなど
 			createInfo.format = m_SwapChainImageFormat;
 
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;    // デフォルト設定　default settings
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;       // デフォルト設定　default settings
 			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -724,12 +727,12 @@ private:
 
 	void createRenderPass()
 	{
-		VkAttachmentDescription colorAttachment{};          // カラーアタッチメント
+		VkAttachmentDescription colorAttachment{};           // カラーアタッチメント
 		colorAttachment.format  = m_SwapChainImageFormat;    // SwapChainフォーマットと同じ　format of color attachment = format of swap chain images
-		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;    // マルチサンプリングなし
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;     // マルチサンプリングなし
 
 		colorAttachment.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;    // レンダリング前の情報はどうするフラッグ　
-		                                                         // what to do with data before rendering
+		                                                          // what to do with data before rendering
 
 		// VK_ATTACHMENT_LOAD_OP_LOAD       : 既存の情報を保存　Preserve existing contents of attachment
 		// VK_ATTACHMENT_LOAD_OP_CLEAR      : クリアする（現在：黒）Clear the values to a constant at the start (in this case, clear to black)
@@ -844,7 +847,7 @@ private:
 		// ビューポート：イメージからフレームバッファーまでの「トランスフォーム」        Viewport: 'transformation' from the image to the framebuffer
 		// シザー四角：ピクセルデータが格納される領域；画面上で描画される「フィルター」  Scissor rectangle: 'filter' in which region pixels will be stored. 
 
-		VkViewport viewport{};    // ビューポート情報構造体
+		VkViewport viewport{};                                // ビューポート情報構造体
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
 		viewport.width = (float)m_SwapChainExtent.width;      // 描画レゾルーションと同じ
@@ -852,16 +855,16 @@ private:
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 
-		VkRect2D scissor{};	                    // シザー四角情報構造体				
+		VkRect2D scissor{};                     // シザー四角情報構造体				
 		scissor.offset = { 0, 0 };              // オフセットなし
 		scissor.extent = m_SwapChainExtent;     // フレームバッファー全体を描画する設定 set to draw the entire framebuffer
 
 		VkPipelineViewportStateCreateInfo viewportState{};    // ビューポートステート（状態）情報構造体
 		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 		viewportState.viewportCount = 1;
-		viewportState.pViewports = &viewport;    // ビューポートのポインター
+		viewportState.pViewports = &viewport;                 // ビューポートのポインター
 		viewportState.scissorCount = 1;
-		viewportState.pScissors = &scissor;      // シザー四角のポインター
+		viewportState.pScissors = &scissor;                   // シザー四角のポインター
 
 		// 4.) ラスタライザー：頂点シェーダーからのジオメトリー（シェープ）をフラグメント（ピクセル）に変換して色を付けます。 
 		// Rasterizer: Takes geomerty shaped from the vertex shader and turns it into fragments (pixels) to be colored by the fragment shader.
@@ -1212,7 +1215,7 @@ private:
 			//     ④：最初のインスタンス（インスタンスレンダリング用）
 			
 			// arguments
-			// firs     : commandBuffer
+			// first    : commandBuffer
 			// second   : vertexCount: even without vertex buffer, still drawing 3 vertices (triangle)
 			// third    : instanceCount: used for instanced rendering, otherwise 1)
 			// fourth   : firstInstance: used as offset for instanced rendering, defines lowest value of gl_InstanceIndex 
@@ -1506,9 +1509,9 @@ private:
 		QueueFamilyIndices indices;
 
 		uint32_t queueFamilyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);    // キュー種類を特定
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);                 // キュー種類を特定
 
-		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);            // キュー種類カウントによりベクトルを生成します
+		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);                         // キュー種類カウントによりベクトルを生成します
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());    // 情報をベクトルに代入
 
 		int i = 0;
