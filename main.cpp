@@ -4,8 +4,8 @@ Author:			Sim Luigi
 Last Modified:	2020.12.08
 
 Current Page:
-https://vulkan-tutorial.com/Vertex_buffers/Staging_buffer
-Vertex Buffer: Staging Buffer(cpmplete!)
+https://vulkan-tutorial.com/en/Vertex_buffers/Index_buffer
+Vertex Buffer: Index Buffers(complete!)
 
 2020.12.06:		今までのソースコードに日本語コメント欄を追加しました。
 
@@ -150,14 +150,16 @@ struct Vertex
 // Vertex Attribute Interleave
 const std::vector<Vertex> vertices = 
 {
-	{{0.0f, -0.5f,}, {1.0f, 1.0f, 1.0f}},
-	{{0.5f, 0.5f,}, {0.0f, 1.0f, 0.0f}},
-	{{-0.5f, 0.5f,}, {0.0f, 0.0f, 1.0f}}
+	{{-0.5f, -0.5f,}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, -0.5f,}, {0.0f, 1.0f, 0.0f}},
+	{{0.5f, 0.5f,}, {0.0f, 0.0f, 1.0f}},
+	{{-0.5f, 0.5f,}, {1.0f, 1.0f, 1.0f}}
 };
 
-
-
-
+const std::vector<uint16_t> indices = // uint16_t for now since using less than 65535 unique vertices
+{
+	0, 1, 2, 2, 3, 0
+};
 
 
 // NDEBUG = Not Debug	
@@ -248,15 +250,15 @@ public:
 
 private:
 
-	GLFWwindow* m_Window;    // WINDOWSではなくGLFW;　クロスプラットフォーム対応
-	VkInstance m_Instance;   // インスタンス：アプリケーションとSDKのつながり
+	GLFWwindow* m_Window;     // WINDOWSではなくGLFW;　クロスプラットフォーム対応
+	VkInstance  m_Instance;   // インスタンス：アプリケーションとSDKのつながり
 	
 	VkDebugUtilsMessengerEXT m_DebugMessenger;   // デバッグコールバック
 	
 	VkSurfaceKHR m_Surface;    // GLFW -> WSI (Windows System Integration) -> ウィンドウ生成
 
-	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;    // 物理デバイス（GPU・グラフィックスカード）
-	VkDevice m_LogicalDevice;                              // 物理デバイスとのシステムインターフェース
+	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;            // 物理デバイス（GPU・グラフィックスカード）
+	VkDevice         m_LogicalDevice;                              // 物理デバイスとのシステムインターフェース
 
 	VkQueue m_GraphicsQueue;    // グラフィックス専用キュー
 	VkQueue m_PresentQueue;     // プレゼント（描画）専用キュー
@@ -269,17 +271,19 @@ private:
 	std::vector<VkImageView> m_SwapChainImageViews;        // VkImageのハンドル；画像を使用する際にアクセスする（ビューそのもの）
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers;    // SwapChainのフレームバッファ
 
-	VkRenderPass m_RenderPass;            // レンダーパス
-	VkPipelineLayout m_PipelineLayout;    // グラフィックスパイプラインレイアウト
-	VkPipeline m_GraphicsPipeline;        // グラフィックスパイプライン自体
+	VkRenderPass     m_RenderPass;            // レンダーパス
+	VkPipelineLayout m_PipelineLayout;        // グラフィックスパイプラインレイアウト
+	VkPipeline       m_GraphicsPipeline;      // グラフィックスパイプライン自体
 
-	VkCommandPool m_CommandPool;    // CommandPool : コマンドバッファーのメモリ管理
+	VkCommandPool    m_CommandPool;           // CommandPool : コマンドバッファーのメモリ管理
 
 	// CommandPoolを削除された同時にコマンドバッファを削除されますのでコマンドバッファーのクリーンアップは不要です。
 	std::vector<VkCommandBuffer> m_CommandBuffers;		
 
-	VkBuffer m_VertexBuffer;                // 頂点バッファー
+	VkBuffer       m_VertexBuffer;          // 頂点バッファー
 	VkDeviceMemory m_VertexBufferMemory;    // 頂点バッファーメモリー割り当て
+	VkBuffer       m_IndexBuffer;           // インデックスバッファー
+	VkDeviceMemory m_IndexBufferMemory;     // インデックスバッファーメモリー割り当て
 
 	// Semaphore：簡単に「シグナル」。処理を同期するために利用します。
 	// Fence: GPU-CPUの間の同期機能；ゲート見たいなストッパーである。
@@ -325,6 +329,7 @@ private:
 		createFramebuffers();       // フレームバッファ生成
 		createCommandPool();        // コマンドバッファーを格納するプールを生成
 		createVertexBuffer();       // 頂点バッファー生成
+		createIndexBuffer();		// インデックスバッファー生成
 		createCommandBuffers();     // コマンドバッファー生成
 		createSyncObjects();        // 処理同期オブジェクト生成
 	}
@@ -373,6 +378,10 @@ private:
 	void cleanup()
 	{
 		cleanupSwapChain();
+
+
+		vkDestroyBuffer(m_LogicalDevice, m_IndexBuffer, nullptr);
+		vkFreeMemory(m_LogicalDevice, m_IndexBufferMemory, nullptr);
 
 		vkDestroyBuffer(m_LogicalDevice, m_VertexBuffer, nullptr);
 		vkFreeMemory(m_LogicalDevice, m_VertexBufferMemory, nullptr);
@@ -1132,10 +1141,9 @@ private:
 	}
 
 	// 頂点バッファー生成
-
-
 	void createVertexBuffer()
 	{
+		// 頂点単位 ＊　配列の要素数
 		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
 		// ステージングバッファー：CPUメモリー上臨時バッファー。頂点データに渡され、最終的な頂点バッファーに渡します。
@@ -1166,6 +1174,43 @@ private:
 
 		// 頂点データをステージングバッファーから頂点バッファーに移す
 		copyBuffer(stagingBuffer, m_VertexBuffer, bufferSize);
+
+		// 用済みのステージングバッファーとメモリーの後片付け
+		vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
+		vkFreeMemory(m_LogicalDevice, stagingBufferMemory, nullptr);
+	}
+
+	// インデックスバッファー生成：頂点バッファーとほぼ同じ（違いは番後　①、②で表示されています
+	void createIndexBuffer()
+	{
+		// インデックス単位　＊　配列の要素数
+		VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();    // 変更点　①、②
+
+		// ステージングバッファー：頂点バッファーと同じ
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
+		createBuffer(
+			bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			stagingBuffer,
+			stagingBufferMemory);
+
+		void* data;	
+		vkMapMemory(m_LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+		memcpy(data, indices.data(), (size_t)bufferSize);        // 変更点　③ vertices.data() --> indices.data()
+		vkUnmapMemory(m_LogicalDevice, stagingBufferMemory);
+
+		// インデックスバッファーを生成します
+		createBuffer(
+			bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,    // 変更点　④ (VK_BUFFER_USAGE_VERTEX_BITからINDEX_BITに)
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			m_IndexBuffer,            // 変更点　⑤  インデックスバッファー
+			m_IndexBufferMemory);     // 変更点　⑥　インデックスバッファーメモリー
+
+		// インデックスデータをステージングバッファーからインデックスバッファーに移す
+		copyBuffer(stagingBuffer, m_IndexBuffer, bufferSize);    // 変更点　⑦　コピー先をインデックスバッファーに
 
 		// 用済みのステージングバッファーとメモリーの後片付け
 		vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
@@ -1296,18 +1341,25 @@ private:
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, vertexBuffers, offsets);
 
-			// 描画コマンド
-			vkCmdDraw(m_CommandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+			// インデックスバッファー
+			vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);    // VK_INDEX_TYPE_UINT32
+
+			// 描画コマンド（インデックスバッファー）
+			vkCmdDrawIndexed(m_CommandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 			// 引数①：コマンドバッファー
 			//     ②：頂点数（頂点バッファーなしでも頂点を描画しています。）
 			//     ③：インスタンス数（インスタンスレンダリング用）
-			//     ④：最初のインスタンス（インスタンスレンダリング用）
-			
+			//     ④：インデックスバッファーの最初点からのオフセット
+			//     ④：インデックスバッファーに足すオフセット (使い道はまだ不明）
+			//     ④：インスタンスのオフセット（インスタンスレンダリング用）
+
 			// arguments
 			// first    : commandBuffer
-			// second   : vertexCount: even without vertex buffer, still drawing 3 vertices (triangle)
+			// second   : vertexCount  : even without vertex buffer, still drawing 3 vertices (triangle)
 			// third    : instanceCount: used for instanced rendering, otherwise 1)
-			// fourth   : firstInstance: used as offset for instanced rendering, defines lowest value of gl_InstanceIndex 
+			// fourth   : firstIndexOffset : offset to start of index buffer (1 means GPU reads from second index)
+			// fifth    : indexAddOffset   : offset to add to indices (not sure what this is for)
+			// sixth    : instanceOffset   : used in instanced rendering
 
 			// レンダーパスを終了します
 			vkCmdEndRenderPass(m_CommandBuffers[i]);
