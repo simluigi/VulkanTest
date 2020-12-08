@@ -1,11 +1,11 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.12.04
+Last Modified:	2020.12.08
 
 Current Page:
-https://vulkan-tutorial.com/en/Vertex_buffers/Vertex_buffer_creation
-Vertex Buffers: Vertex buffer creation(complete!). Disabled VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT from validation layers.
+https://vulkan-tutorial.com/Vertex_buffers/Staging_buffer
+Vertex Buffer: Staging Buffer(cpmplete!)
 
 2020.12.06:		今までのソースコードに日本語コメント欄を追加しました。
 
@@ -27,12 +27,15 @@ Vertex Buffers: Vertex buffer creation(complete!). Disabled VK_DEBUG_UTILS_MESSA
 		　→レイヤー③：エラー（デバッグメッセンジャー表示、エラーハンドリング）
 
 ＊　Vulkanのシェーダーコードについて：
-	GLSLやHLSLなどのハイレベルシェーダー言語（特に、HLSLはまさにHighLevelShadingLanguage)と違って、
+	GLSLやHLSLなどのハイレベルシェーダー言語（HLSLはまさにHighLevelShadingLanguage)と違って、
 	VulkanのシェーダーコードはSPIR-Vというバイトコードフォーマットで定義されています。
+
 	GPUによるハイレベルシェーダーコードの読み方が異なる場合があり、
 	あるGPUでシェーダーがうまく動いても他のGPUで同じ結果が出せるとは限りません。
 	機械語のローレベルランゲージではないが、HLSLと機械語の間のインターメディエイトレベル
 	言語としてクロスプラットフォーム処理に向いています。
+
+	なお、GLSLなどのシェーダーはSPIR-Vに変換するツールを使えばVulkanで使えるようになるはずです。
 
 ＊	Vulkanのあらゆるコマンド（描画、メモリ転送）などが関数で直接呼ばれません。オブジェクトと同じように
 	コマンドバッファーを生成して、そのコマンドをコマンドバッファーに登録（格納）します。
@@ -41,13 +44,19 @@ Vertex Buffers: Vertex buffer creation(complete!). Disabled VK_DEBUG_UTILS_MESSA
 ＊	フラグメントシェーダー：　ピクセルシェーダーと同じです。
 
 ＊　VulkanのBool関数に限って、true・falseではなく、VK_TRUE・VK_FALSEを使用することです。
+	同じく、Vulkan専用 VK_SUCCESS、VK_ERROR_○○コールバックも用意されています。
+
+＊　ステージングバッファーの使用の理由
+	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT： 一番理想的なメモリーフォーマットが、ローカルメモリーが直接アクセスできません。
+	そこで、そのメモリータイプが使えるCPU上の「ステージングバッファー」を生成し、頂点配列（データ）に渡します。
+	そしてステージングバッファーの情報をローカルメモリーに格納されている頂点バッファーに移します。
 
 =======================================================================*/
 
 #define GLFW_INCLUDE_VULKAN    // VulkanSDKをGLFWと一緒にインクルードします。
 #include <GLFW/glfw3.h>        // replaces #include <vulkan/vulkan.h> and automatically bundles it with glfw include
 
-#include <iostream>
+#include <iostream> 
 #include <vector>
 #include <set>
 #include <array>
@@ -1088,43 +1097,123 @@ private:
 		}
 	}
 
-	void createVertexBuffer()
+	// 汎用バッファー生成関数
+	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, 
+		VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 	{
-		VkBufferCreateInfo bufferInfo{};    // 頂点バッファー情報構造体
+		VkBufferCreateInfo bufferInfo{};                          // バッファー情報構造体
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.size = sizeof(vertices[0]) * vertices.size();
-		bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;     // ユースケース：頂点バッファー
+		bufferInfo.size = size;
+		bufferInfo.usage = usage;                                 // ユースケース：頂点バッファー
 		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;       // 共有モード（SwapChain生成と同じ）：今回グラフィックスキュー専用
-		bufferInfo.flags = 0;
 
-		// 上記の構造体に基づいて実際の頂点バッファーを生成します。
-		if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &m_VertexBuffer) != VK_SUCCESS)
+		// 上記の構造体に基づいて実際のバッファーを生成します。
+		if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create vertex buffer!");
 		}
 
 		VkMemoryRequirements memRequirements;
-		vkGetBufferMemoryRequirements(m_LogicalDevice, m_VertexBuffer, &memRequirements);
+		vkGetBufferMemoryRequirements(m_LogicalDevice, buffer, &memRequirements);
 
 		VkMemoryAllocateInfo allocInfo{};    // メモリー割り当て情報構造体
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
 		// 上記の構造体に基づいて実際のメモリー確保処理を実行します。
-		if (vkAllocateMemory(m_LogicalDevice, &allocInfo, nullptr, &m_VertexBufferMemory) != VK_SUCCESS)
+		if (vkAllocateMemory(m_LogicalDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to allocate vertex buffer memory!");
 		}
 
 		// 確保されたメモリー割り当てを頂点バッファーにバインドします
-		vkBindBufferMemory(m_LogicalDevice, m_VertexBuffer, m_VertexBufferMemory, 0);
+		vkBindBufferMemory(m_LogicalDevice, buffer, bufferMemory, 0);
+	}
+
+	// 頂点バッファー生成
+
+
+	void createVertexBuffer()
+	{
+		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+		// ステージングバッファー：CPUメモリー上臨時バッファー。頂点データに渡され、最終的な頂点バッファーに渡します。
+		// Staging buffer: temporary buffer in CPU memory that takes in vertex array and sends it to the final vertex buffer
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
+		createBuffer(
+			bufferSize, 
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+			stagingBuffer, 
+			stagingBufferMemory);
 
 		void* data;	// voidポインター；今回メモリーマップに使用します
-		vkMapMemory(m_LogicalDevice, m_VertexBufferMemory, 0, bufferInfo.size, 0, &data);
-			memcpy(data, vertices.data(), (size_t)bufferInfo.size);
-		vkUnmapMemory(m_LogicalDevice, m_VertexBufferMemory);
+		
+		// 情報をメモリーにマップ
+		vkMapMemory(m_LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+			memcpy(data, vertices.data(), (size_t)bufferSize);
+		vkUnmapMemory(m_LogicalDevice, stagingBufferMemory);
+		
+		// 頂点バッファーを生成します
+		createBuffer(
+			bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,		// 一番理想的なメモリーフォーマットが、普通にCPUがアクセスできません。
+			m_VertexBuffer,
+			m_VertexBufferMemory);
+
+		// 頂点データをステージングバッファーから頂点バッファーに移す
+		copyBuffer(stagingBuffer, m_VertexBuffer, bufferSize);
+
+		// 用済みのステージングバッファーとメモリーの後片付け
+		vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
+		vkFreeMemory(m_LogicalDevice, stagingBufferMemory, nullptr);
+	}
+
+	// バッファーコピー関数
+	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+	{
+		// 情報コピー処理の準備：コマンドバッファー生成
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandPool = m_CommandPool;
+		allocInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, &commandBuffer);
+
+		VkCommandBufferBeginInfo beginInfo{};    // コマンドバッファー開始情報構造体
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;    // 使用回数：1回のみ
+
+		// コマンドバッファー（処理記録）開始
+		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+		// コピー領域確保
+		VkBufferCopy copyRegion{};
+		copyRegion.srcOffset = 0;    // 任意 optional
+		copyRegion.dstOffset = 0;    // 任意 optional
+		copyRegion.size = size;
+
+		// コピー元のバッファーの中身をコピー先のバッファーにコピーするコマンドを記録します
+		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+		// コマンドバッファー記録終了
+		vkEndCommandBuffer(commandBuffer);
+
+		VkSubmitInfo submitInfo{};    // サブミット（キューに入れる）情報構造体
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+
+		// コマンドバッファー情報をキューにサブミットします
+		vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		
+		vkQueueWaitIdle(m_GraphicsQueue);    // 処理終了まで待機
+		vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, 1, &commandBuffer);    // コマンドバッファーを開放します
 	}
 
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
