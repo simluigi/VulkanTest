@@ -5,7 +5,7 @@ Last Modified:	2020.12.09
 
 Current Page:
 https://vulkan-tutorial.com/en/Uniform_buffers/Descriptor_pool_and_sets
-Uniform Buffers: Descriptor Pool and Sets
+Uniform Buffers: Descriptor Pool and Sets(complete!)
 
 2020.12.06:		今までのソースコードに日本語コメント欄を追加しました。
 
