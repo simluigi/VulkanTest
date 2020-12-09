@@ -1,11 +1,11 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.12.08
+Last Modified:	2020.12.09
 
 Current Page:
-https://vulkan-tutorial.com/Uniform_buffers/Descriptor_layout_and_buffer
-Uniform Buffers: Descriptor Layout and buffer(complete!)
+https://vulkan-tutorial.com/en/Uniform_buffers/Descriptor_pool_and_sets
+Uniform Buffers: Descriptor Pool and Sets
 
 2020.12.06:		今までのソースコードに日本語コメント欄を追加しました。
 
@@ -109,14 +109,50 @@ const std::vector<const char*> deviceExtensions =
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME    // 誤字を避けるためのマクロ定義
 };
 
-// UBO (UniformBufferObject): マトリクス変換情報・MVP Transform
-struct UniformBufferObject
-{
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 proj;
-};
+// NDEBUG = Not Debug	
+#ifdef NDEBUG					
+// バリデーションレイヤー無効
+const bool enableValidationLayers = false;
+#else
+// バリデーションレイヤー有効
+const bool enableValidationLayers = true;
+#endif
 
+// デバッグメッセンジャー生成
+// エクステンション関数：自動的にロードされていません。
+// 関数アドレスをvkGetInstanceProcedureAddr()で特定できます。
+// extension function; not automatically loaded. Need to specify address via	
+// vkGetInstanceProcedureAddr()
+VkResult CreateDebugUtilsMessengerEXT(
+	VkInstance instance,
+	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+	const VkAllocationCallbacks* pAllocator,
+	VkDebugUtilsMessengerEXT* pDebugMessenger)
+{
+	PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr
+	(instance, "vkCreateDebugUtilsMessengerEXT");
+	if (func != nullptr)
+	{
+		return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+	}
+	else
+	{
+		return VK_ERROR_EXTENSION_NOT_PRESENT;
+	}
+}
+
+// デバッグメッセンジャー削除
+void DestroyDebugUtilsMessengerEXT(
+	VkInstance instance,
+	VkDebugUtilsMessengerEXT debugMessenger,
+	const VkAllocationCallbacks* pAllocator)
+{
+	PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+	if (func != nullptr)
+	{
+		func(instance, debugMessenger, pAllocator);
+	}
+}
 
 struct Vertex
 {
@@ -173,6 +209,15 @@ struct Vertex
 	}
 };
 
+// UBO (UniformBufferObject): マトリクス変換情報・MVP Transform
+struct UniformBufferObject
+{
+	alignas(16) glm::mat4 model;
+	alignas(16) glm::mat4 view;
+	alignas(16) glm::mat4 proj;
+};
+
+
 // 頂点データインターリーブ
 // Vertex Attribute Interleave
 const std::vector<Vertex> vertices = 
@@ -187,55 +232,6 @@ const std::vector<uint16_t> indices = // uint16_t for now since using less than 
 {
 	0, 1, 2, 2, 3, 0
 };
-
-
-// NDEBUG = Not Debug	
-#ifdef NDEBUG					
-// バリデーションレイヤー無効
-const bool enableValidationLayers = false;
-#else
-// バリデーションレイヤー有効
-const bool enableValidationLayers = true;
-#endif
-
-// デバッグ機能生成・削除関数はクラス外又はスタティックで設定しないといけません。
-// create/destroy debug functions must either be a static class function or function outside the class
-
-// デバッグメッセンジャー生成
-// エクステンション関数：自動的にロードされていません。
-// 関数アドレスをvkGetInstanceProcedureAddr()で特定できます。
-// extension function; not automatically loaded. Need to specify address via	
-// vkGetInstanceProcedureAddr()
-VkResult CreateDebugUtilsMessengerEXT(
-	VkInstance instance,
-	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-	const VkAllocationCallbacks* pAllocator,
-	VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
-	PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr
-		(instance, "vkCreateDebugUtilsMessengerEXT");
-	if (func != nullptr)
-	{
-		return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-	}
-	else
-	{
-		return VK_ERROR_EXTENSION_NOT_PRESENT;
-	}
-}
-
-// デバッグメッセンジャー削除
-void DestroyDebugUtilsMessengerEXT(
-	VkInstance instance,
-	VkDebugUtilsMessengerEXT debugMessenger,
-	const VkAllocationCallbacks* pAllocator)
-{
-	PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-	if (func != nullptr)
-	{
-		func(instance, debugMessenger, pAllocator);
-	}
-}
 
 // Vulkan上のあらゆる処理はキューで処理されています。処理によってキューの種類も異なります。
 struct QueueFamilyIndices
@@ -303,10 +299,11 @@ private:
 	VkPipelineLayout         m_PipelineLayout;         // グラフィックスパイプラインレイアウト
 	VkPipeline               m_GraphicsPipeline;       // グラフィックスパイプライン自体
 
-	VkCommandPool    m_CommandPool;           // CommandPool : コマンドバッファーのメモリ管理
+	VkCommandPool                   m_CommandPool;       // CommandPool : コマンドバッファー、そしてその割り当てたメモリ管理、
+	std::vector<VkCommandBuffer>    m_CommandBuffers;		
 
-	// CommandPoolを削除された同時にコマンドバッファを削除されますのでコマンドバッファーのクリーンアップは不要です。
-	std::vector<VkCommandBuffer> m_CommandBuffers;		
+	VkDescriptorPool                m_DescriptorPool;    // DescriptorPool : デスクリプターセット、そしてその割り当てたメモリ管理
+	std::vector<VkDescriptorSet>    m_DescriptorSets;
 
 	VkBuffer       m_VertexBuffer;          // 頂点バッファー
 	VkDeviceMemory m_VertexBufferMemory;    // 頂点バッファーメモリー割り当て
@@ -363,6 +360,8 @@ private:
 		createVertexBuffer();           // 頂点バッファー生成
 		createIndexBuffer();		    // インデックスバッファー生成
 		createUniformBuffers();         // ユニフォームバッファー生成
+		createDescriptorPool();         // デスクリプターセットを格納するプールを生成
+		createDescriptorSets();         // デスクリプターセットを生成
 		createCommandBuffers();         // コマンドバッファー生成
 		createSyncObjects();            // 処理同期オブジェクト生成
 	}
@@ -411,6 +410,8 @@ private:
 			vkDestroyBuffer(m_LogicalDevice, m_UniformBuffers[i], nullptr);
 			vkFreeMemory(m_LogicalDevice, m_UniformBuffersMemory[i], nullptr);
 		}
+
+		vkDestroyDescriptorPool(m_LogicalDevice, m_DescriptorPool, nullptr);
 
 	}
 
@@ -477,6 +478,8 @@ private:
 		createGraphicsPipeline();   // ビューポート、Scissorに依存する
 		createFramebuffers();       // SwapChain内の画像に依存する
 		createUniformBuffers();     // SwapChain内の画像に依存する
+		createDescriptorPool();     // SwapChain内の画像に依存する
+		createDescriptorSets();     // SwapChain内の画像に依存する
 		createCommandBuffers();     // SwapChain内の画像に依存する
 	}
 
@@ -678,6 +681,7 @@ private:
 		// GPUのSwapChainサポート情報を読み込む
 		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_PhysicalDevice);
 
+
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
 		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
@@ -690,8 +694,6 @@ private:
 		// sometimes we may have to wait on the driver to perform internal operations before we can acquire
 		// another image to render to. Therefore it is recommended to request at least one more image than the minimum.
 		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-
-
 		if (swapChainSupport.capabilities.maxImageCount > 0                 // zero here means there is no maximum!
 			&& imageCount > swapChainSupport.capabilities.maxImageCount)
 		{
@@ -757,6 +759,7 @@ private:
 	void createImageViews()
 	{
 		m_SwapChainImageViews.resize(m_SwapChainImages.size());    // イメージカウントによってベクトルサイズを変更する allocate enough size to fit all image views 					
+		
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
 			VkImageViewCreateInfo createInfo{};                            // イメージビュー生成構造体
@@ -856,13 +859,11 @@ private:
 	{
 		VkDescriptorSetLayoutBinding uboLayoutBinding{};    // UniversalBufferObjectレイアウトバインディング情報構造体
 		uboLayoutBinding.binding = 0;
+		uboLayoutBinding.descriptorCount = 1;               // MVPトランスフォームは1つのバッファーオブジェクトに格納されています
 		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		uboLayoutBinding.descriptorCount = 1;               // MVPトランスフォームは1つのバッファーオブジェクトに格納されています 
-
+		uboLayoutBinding.pImmutableSamplers = nullptr;               // 任意 optional, image sampling用
 		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;    // 参照できるシェーダーステージ（現在、頂点シェーダーでスクリプター）
 		                                                             // 全てのステージの場合、VK_SHADER_STAGE_ALL_GRAPHICS
-		uboLayoutBinding.pImmutableSamplers = nullptr;               // 任意 optional, image sampling用
-
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		layoutInfo.bindingCount = 1;
@@ -872,9 +873,9 @@ private:
 		{
 			throw std::runtime_error("Failed to create descriptor set layout!");
 		}
-
 	}
 
+	// グラフィックスパイプライン生成
 	void createGraphicsPipeline()
 	{
 		const std::vector<char> vertShaderCode = readFile("shaders/vert.spv");    // 頂点シェーダー外部ファイルの読み込み
@@ -969,10 +970,9 @@ private:
 		rasterizer.lineWidth = 1.0f;    // ラインの厚さ（ピクセル単位）Line thickness (in pixels)
 		// ※1.0以上の厚さの場合、特定なGPU機能をオンにする必要があります。Using line width greater than 1.0f requires enabling a GPU feature.
 
-		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;        // カリング設定（通常：BackfaceCulling)
-		rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;     // 頂点の順番により表面・裏面を判断する設定（時計回り・反時計回り）
-		                                                    // determines front-facing by vertex order (CLOCKWISE or COUNTER_CLOCKWISE) 
-
+		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;                // カリング設定（通常：BackfaceCulling)
+		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;     // 頂点の順番により表面・裏面を判断する設定（時計回り・反時計回り）
+		                                                            // determines front-facing by vertex order (CLOCKWISE or COUNTER_CLOCKWISE) 
 		rasterizer.depthBiasEnable = VK_FALSE;        // VK_TRUE: Depth値調整（シャドウマッピング）Adjusting depth values i.e. for shadow mapping
 		rasterizer.depthBiasConstantFactor = 0.0f;    // 任意 optional
 		rasterizer.depthBiasClamp = 0.0f;             // 任意 optional
@@ -1155,6 +1155,7 @@ private:
 		}
 	}
 
+	// コマンドバッファーを使うためのコマンドプールの生成します
 	void createCommandPool()
 	{
 		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_PhysicalDevice);
@@ -1168,42 +1169,8 @@ private:
 		// 上記の構造体の情報に基づいて実際のコマンドプールを生成します。
 		if (vkCreateCommandPool(m_LogicalDevice, &poolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
 		{
-			throw std::runtime_error("Failed to create command pool!");
+			throw std::runtime_error("Failed to create graphics command pool!");
 		}
-	}
-
-	// 汎用バッファー生成関数
-	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, 
-		VkBuffer& buffer, VkDeviceMemory& bufferMemory)
-	{
-		VkBufferCreateInfo bufferInfo{};                          // バッファー情報構造体
-		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.size = size;
-		bufferInfo.usage = usage;                                 // ユースケース：頂点バッファー
-		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;       // 共有モード（SwapChain生成と同じ）：今回グラフィックスキュー専用
-
-		// 上記の構造体に基づいて実際のバッファーを生成します。
-		if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
-		{
-			throw std::runtime_error("Failed to create vertex buffer!");
-		}
-
-		VkMemoryRequirements memRequirements;
-		vkGetBufferMemoryRequirements(m_LogicalDevice, buffer, &memRequirements);
-
-		VkMemoryAllocateInfo allocInfo{};    // メモリー割り当て情報構造体
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-		// 上記の構造体に基づいて実際のメモリー確保処理を実行します。
-		if (vkAllocateMemory(m_LogicalDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
-		{
-			throw std::runtime_error("Failed to allocate vertex buffer memory!");
-		}
-
-		// 確保されたメモリー割り当てを頂点バッファーにバインドします
-		vkBindBufferMemory(m_LogicalDevice, buffer, bufferMemory, 0);
 	}
 
 	// 頂点バッファー生成
@@ -1302,7 +1269,102 @@ private:
 				m_UniformBuffersMemory[i]
 			);
 		}
+	}
 
+	// でスクリプターセットを直接生成できません。コマンドバッファーのコマンドプールと同じように、まずは
+	// でスクリプタープールを生成する必要があります
+	void createDescriptorPool()
+	{
+		VkDescriptorPoolSize poolSize{};    // 各フレームに1つのデスクリプターを用意します
+		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSize.descriptorCount = static_cast<uint32_t>(m_SwapChainImages.size());
+
+		VkDescriptorPoolCreateInfo poolInfo{};    // デスクリプタープール生成情報構造体
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount = 1;
+		poolInfo.pPoolSizes = &poolSize;
+		poolInfo.maxSets = static_cast<uint32_t>(m_SwapChainImages.size());
+
+		if (vkCreateDescriptorPool(m_LogicalDevice, &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create descriptor pool!");
+		}
+	}
+
+	// デスクリプターセット（トランスフォーム情報）生成
+	void createDescriptorSets()
+	{
+		std::vector<VkDescriptorSetLayout> layouts(m_SwapChainImages.size(), m_DescriptorSetLayout);
+
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = m_DescriptorPool;    // デスクリプタープール
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(m_SwapChainImages.size());
+		allocInfo.pSetLayouts = layouts.data();
+
+		m_DescriptorSets.resize(m_SwapChainImages.size());
+		if (vkAllocateDescriptorSets(m_LogicalDevice, &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to allocate descriptor sets!");
+		}
+
+		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
+		{
+			VkDescriptorBufferInfo bufferInfo{};
+			bufferInfo.buffer = m_UniformBuffers[i];
+			bufferInfo.offset = 0;
+			bufferInfo.range = sizeof(UniformBufferObject);    // 完全に上書き：VK_WHOLE_SIZEと同じ
+
+			VkWriteDescriptorSet descriptorWrite{};    // デスクリプターの設定・コンフィグレーション情報構造体
+			descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrite.dstSet = m_DescriptorSets[i];
+			descriptorWrite.dstBinding = 0;                // ユニフォームバッファーバインディングインデックス「0」
+			descriptorWrite.dstArrayElement = 0;           // 配列を使っていない場合、「0」
+
+			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrite.descriptorCount = 1;
+
+			descriptorWrite.pBufferInfo = &bufferInfo;
+			descriptorWrite.pImageInfo = nullptr;          // 任意 optional
+			descriptorWrite.pTexelBufferView = nullptr;    // 任意 optional
+
+			// デスクリプターセットを更新します
+			vkUpdateDescriptorSets(m_LogicalDevice, 1, &descriptorWrite, 0, nullptr);
+		}
+	}
+
+	// 汎用バッファー生成関数
+	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+		VkBuffer& buffer, VkDeviceMemory& bufferMemory)
+	{
+		VkBufferCreateInfo bufferInfo{};                          // バッファー情報構造体
+		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		bufferInfo.size = size;
+		bufferInfo.usage = usage;                                 // ユースケース：頂点バッファー
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;       // 共有モード（SwapChain生成と同じ）：今回グラフィックスキュー専用
+
+		// 上記の構造体に基づいて実際のバッファーを生成します。
+		if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create vertex buffer!");
+		}
+
+		VkMemoryRequirements memRequirements;
+		vkGetBufferMemoryRequirements(m_LogicalDevice, buffer, &memRequirements);
+
+		VkMemoryAllocateInfo allocInfo{};    // メモリー割り当て情報構造体
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+		// 上記の構造体に基づいて実際のメモリー確保処理を実行します。
+		if (vkAllocateMemory(m_LogicalDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to allocate vertex buffer memory!");
+		}
+
+		// 確保されたメモリー割り当てを頂点バッファーにバインドします
+		vkBindBufferMemory(m_LogicalDevice, buffer, bufferMemory, 0);
 	}
 
 	// バッファーコピー関数
@@ -1344,7 +1406,7 @@ private:
 
 		// コマンドバッファー情報をキューにサブミットします
 		vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-		
+
 		vkQueueWaitIdle(m_GraphicsQueue);    // 処理終了まで待機
 		vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, 1, &commandBuffer);    // コマンドバッファーを開放します
 	}
@@ -1366,20 +1428,19 @@ private:
 		throw std::runtime_error("Failed to find suitable memory type!");    // 適切なメモリータイプが見つからなかった場合
 	}
 
+	// コマンドプールの情報からコマンドバッファー生成
 	void createCommandBuffers()
 	{
 		m_CommandBuffers.resize(m_SwapChainFramebuffers.size());    // フレームバッファーサイズに合わせる
 
 		VkCommandBufferAllocateInfo allocInfo{};                    // メモリー割り当て情報構造体
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = m_CommandPool;
-		
+		allocInfo.commandPool = m_CommandPool;		
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;					
 		// PRIMARY:	キューに直接渡せますが、他のコマンドバッファーから呼び出せません。
 		// can be submitted to queue for execution, but cannot be called from other command buffers
 		// SECONDARY:　キューに直接渡せませんが、プライマリーコマンドバッファーから呼び出せます。
 		// cannot be submitted directly, but can be called from primary command buffers
-
 		allocInfo.commandBufferCount = (uint32_t)m_CommandBuffers.size();
 
 		if (vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, m_CommandBuffers.data()) != VK_SUCCESS)
@@ -1431,6 +1492,18 @@ private:
 
 			// インデックスバッファー
 			vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);    // VK_INDEX_TYPE_UINT32
+
+			// デスクリプターセットをバインドします
+			vkCmdBindDescriptorSets(
+				m_CommandBuffers[i],
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				m_PipelineLayout,
+				0,
+				1,
+				&m_DescriptorSets[i],
+				0,
+				nullptr)
+				;
 
 			// 描画コマンド（インデックスバッファー）
 			vkCmdDrawIndexed(m_CommandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
@@ -1485,6 +1558,41 @@ private:
 		}
 	}
 
+	
+	void updateUniformBuffer(uint32_t currentImage)
+	{
+		//// startTime、currentTimeの実際のデータ型: static std::chrono::time_point<std::chrono::steady_clock> 
+		static auto startTime = std::chrono::high_resolution_clock::now();
+		auto currentTime = std::chrono::high_resolution_clock::now();
+		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+		
+		UniformBufferObject ubo{};  // MVPトランスフォーム情報構造体
+
+		//// M(Model: 毎フレーム、Z軸に90°回転させる
+		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));   
+		//
+		// V(View): 引数　eye位置, center位置, up軸　（現在上から45°）
+		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+		// P(Projection): 引数　45°バーティカルFoV, アスペクト比、ニア、ファービュープレーン
+		// arguments: field-of-view, aspect ratio, near and far view planes 
+		ubo.proj = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
+
+		//// 元々GLMはOpelGLに対応するために設計されています（Y軸のクリップ座標が逆さになっています）。
+		//// Vulkanに対応するためにクリップ座標のY軸を「元に戻す」訳です。こうしないと描画はひっくり返す状態になってしまいます。
+
+		//// GLM was initially developed for OpenGL where the Y-coordinate of the clip coordinates is reversed.  
+		//// To compensate, multiply the Y-coordinate of the projection matrix by -1 (reverting back to normal).  
+		//// Not doing this results in an upside-down render.
+		ubo.proj[1][1] *= -1;
+
+		//// UBO情報を現在のユニフォームバッファーにうつします
+		void* data;
+		vkMapMemory(m_LogicalDevice, m_UniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+		memcpy(data, &ubo, sizeof(ubo));
+		vkUnmapMemory(m_LogicalDevice, m_UniformBuffersMemory[currentImage]);
+	}
+
 	// 描画関数
 	void drawFrame()
 	{
@@ -1506,6 +1614,9 @@ private:
 			throw std::runtime_error("Failed to acquire swap chain image!");
 		}
 
+		// ユニフォームバッファー更新
+		updateUniformBuffer(imageIndex);
+
 		// 現在の画像が以前のフレームで使われているか（フェンスを待っているか）
 		// check if a previous frame is using this image (i.e. there is its fence to wait on)
 		if (m_ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -1516,9 +1627,6 @@ private:
 		// 現在の画像が現在のフレームで使われているように示す。
 		// mark the image as now being in use by this frame
 		m_ImagesInFlight[imageIndex] = m_InFlightFences[m_CurrentFrame];
-
-		// ユニフォームバッファー更新
-		updateUniformBuffers(imageIndex);
 
 		VkSubmitInfo submitInfo{};    // キュー同期・提出情報構造体
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1576,34 +1684,6 @@ private:
 		m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;    // 次のフレームに移動　advance to next frame
 	}
 
-	void updateUniformBuffers(uint32_t currentImage)
-	{
-		// startTime、currentTimeの実際のデータ型: static std::chrono::time_point<std::chrono::steady_clock> 
-		static auto startTime = std::chrono::high_resolution_clock::now();
-		
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-		
-		UniformBufferObject ubo{};  // MVPトランスフォーム情報構造体
-
-		// M(Model: 毎フレーム、Z軸に90°回転させる
-		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));    
-		
-		// V(View): 引数　eye位置, center位置, up軸　（現在上から45°）
-		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-		// P(Projection): 引数　45°バーティカルFoV, アスペクト比、ニア、ファービュープレーン
-		// arguments: field-of-view, aspect ratio, near and far view planes 
-		ubo.proj = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
-
-		// 元々GLMはOpelGLに対応するために設計されています（Y軸のクリップ座標が逆さになっています）。
-		// Vulkanに対応するためにクリップ座標のY軸を「元に戻す」訳です。こうしないと描画はひっくり返す状態になってしまいます。
-
-		// GLM was initially developed for OpenGL where the Y-coordinate of the clip coordinates is reversed.  
-		// To compensate, multiply the Y-coordinate of the projection matrix by -1 (reverting back to normal).  
-		// Not doing this results in an upside-down render.
-		ubo.proj[1][1] *= -1;
-	}
 
 	// シェーダーコードをパイプラインに使用する際にシェーダーモジュールにwrapする必要があります。
 	VkShaderModule createShaderModule(const std::vector<char>& code)	
