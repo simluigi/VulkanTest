@@ -4,8 +4,8 @@ Author:			Sim Luigi
 Last Modified:	2020.12.10
 
 Current Page:
-https://vulkan-tutorial.com/en/Texture_mapping/Combined_image_sampler
-Texture Mapping: Combined Image Sampler(complete!)
+https://vulkan-tutorial.com/en/Depth_buffering
+Depth buffering (Handling Window Size)
 
 2020.12.06:		今までのソースコードに日本語コメント欄を追加しました。
 
@@ -67,7 +67,13 @@ Texture Mapping: Combined Image Sampler(complete!)
 #include <GLFW/glfw3.h>        // replaces #include <vulkan/vulkan.h> and automatically bundles it with glfw include
 
 #define GLM_FORCE_RADIANS                   // glm::rotate関数をラジアンで処理する設定
-#include <glm/glm.hpp>                      // 
+
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE	        // GLMのプロジェクションマトリックスのZソート値は -1.0～1.0（OpenGL対応のため）
+                                            // Vulkan対応にするために 0.0～1.0 に設定する必要があります
+                                            // GLM uses depth ranges of -1.0 to 1.0 in accordance with OpenGL standards.
+                                            // To use GLM projection matrices in Vulkan for depth buffering, we need to set values to 0.0 to 1.0
+
+#include <glm/glm.hpp>                      // glmインクルード
 #include <glm/gtc/matrix_transform.hpp>     // モデルトランスフォーム              glm::rotate, glm::scale  
                                             // ビュートランスフォーム              glm::lookAt
                                             // プロジェクショントランスフォーム    glm::perspective
@@ -160,7 +166,7 @@ void DestroyDebugUtilsMessengerEXT(
 struct Vertex
 {
 	// glmライブラリーがシェーダーコードに合ってるC++データ型を用意してくれます。
-	glm::vec2 pos;		
+	glm::vec3 pos;		
 	glm::vec3 color;
 	glm::vec2 texCoord;
 
@@ -189,7 +195,7 @@ struct Vertex
 		// bindingDescriptionと同じ値: 頂点シェーダー (location = 0) in	
 		attributeDescriptions[0].binding = 0;	
 		attributeDescriptions[0].location = 0;			
-		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;	
+		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;    // 3Dジオメトリー	
 		attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
 		// フォーマットについて：	// 普通に以下の組み合わせで宣言されています。															
@@ -231,15 +237,21 @@ struct UniformBufferObject
 // Vertex Attribute Interleave
 const std::vector<Vertex> vertices = 
 {
-	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+	{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+	{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+	{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+	{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+	{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+	{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+	{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+	{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = // uint16_t for now since using less than 65535 unique vertices
 {
-	0, 1, 2, 2, 3, 0
+	0, 1, 2, 2, 3, 0,
+	4, 5, 6, 6, 7, 4
 };
 
 // Vulkan上のあらゆる処理はキューで処理されています。処理によってキューの種類も異なります。
@@ -282,59 +294,62 @@ public:
 
 private:
 
-	GLFWwindow* m_Window;     // WINDOWSではなくGLFW;　クロスプラットフォーム対応
-	VkInstance  m_Instance;   // インスタンス：アプリケーションとSDKのつながり
+	GLFWwindow*                     m_Window;                // WINDOWSではなくGLFW;　クロスプラットフォーム対応
+	VkInstance                      m_Instance;              // インスタンス：アプリケーションとSDKのつながり
 	
-	VkDebugUtilsMessengerEXT m_DebugMessenger;   // デバッグコールバック
+	VkDebugUtilsMessengerEXT        m_DebugMessenger;        // デバッグコールバック
 	
-	VkSurfaceKHR m_Surface;    // GLFW -> WSI (Windows System Integration) -> ウィンドウ生成
+	VkSurfaceKHR                    m_Surface;               // GLFW -> WSI (Windows System Integration) -> ウィンドウ生成
 
-	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;            // 物理デバイス（GPU・グラフィックスカード）
-	VkDevice         m_LogicalDevice;                              // 物理デバイスとのシステムインターフェース
+	VkPhysicalDevice    m_PhysicalDevice = VK_NULL_HANDLE;   // 物理デバイス（GPU・グラフィックスカード）
+	VkDevice            m_LogicalDevice;                     // 物理デバイスとのシステムインターフェース・洋平先生：「デバイスお姉さん」
 
-	VkQueue m_GraphicsQueue;    // グラフィックス専用キュー
-	VkQueue m_PresentQueue;     // プレゼント（描画）専用キュー
+	VkQueue                         m_GraphicsQueue;         // グラフィックス専用キュー
+	VkQueue                         m_PresentQueue;          // プレゼント（描画）専用キュー
 
-	VkSwapchainKHR m_SwapChain;                // 表示する予定の画像のキュー
-	std::vector<VkImage> m_SwapChainImages;	   // キュー画像
-	VkFormat m_SwapChainImageFormat;           // 画像フォーマット
-	VkExtent2D m_SwapChainExtent;              // extent : 画像レゾルーション（通常、ウィンドウと同じ）
+	VkSwapchainKHR                  m_SwapChain;             // 表示する予定の画像のキュー
+	std::vector<VkImage>            m_SwapChainImages;	     // キュー画像
+	VkFormat                        m_SwapChainImageFormat;  // 画像フォーマット
+	VkExtent2D                      m_SwapChainExtent;       // extent : 画像レゾルーション（通常、ウィンドウと同じ）
 
-	std::vector<VkImageView> m_SwapChainImageViews;        // VkImageのハンドル；画像を使用する際にアクセスする（ビューそのもの）
-	std::vector<VkFramebuffer> m_SwapChainFramebuffers;    // SwapChainのフレームバッファ
+	std::vector<VkImageView>   m_SwapChainImageViews;        // VkImageのハンドル；画像を使用する際にアクセスする（ビューそのもの）
+	std::vector<VkFramebuffer> m_SwapChainFramebuffers;      // SwapChainのフレームバッファ
 
-	VkRenderPass             m_RenderPass;             // レンダーパス
-	VkDescriptorSetLayout    m_DescriptorSetLayout;    // でスクリプターセットレイアウト
-	VkPipelineLayout         m_PipelineLayout;         // グラフィックスパイプラインレイアウト
-	VkPipeline               m_GraphicsPipeline;       // グラフィックスパイプライン自体
+	VkRenderPass                    m_RenderPass;            // レンダーパス
+	VkDescriptorSetLayout           m_DescriptorSetLayout;   // でスクリプターセットレイアウト
+	VkPipelineLayout                m_PipelineLayout;        // グラフィックスパイプラインレイアウト
+	VkPipeline                      m_GraphicsPipeline;      // グラフィックスパイプライン自体
 
-	VkCommandPool                   m_CommandPool;       // CommandPool : コマンドバッファー、そしてその割り当てたメモリ管理、
+	VkCommandPool                   m_CommandPool;           // CommandPool : コマンドバッファー、そしてその割り当てたメモリ管理、
 	std::vector<VkCommandBuffer>    m_CommandBuffers;		
 
-	VkDescriptorPool                m_DescriptorPool;    // DescriptorPool : デスクリプターセット、そしてその割り当てたメモリ管理
+	VkDescriptorPool                m_DescriptorPool;        // DescriptorPool : デスクリプターセット、そしてその割り当てたメモリ管理
 	std::vector<VkDescriptorSet>    m_DescriptorSets;
 
-	VkBuffer       m_VertexBuffer;          // 頂点バッファー
-	VkDeviceMemory m_VertexBufferMemory;    // 頂点バッファーメモリー割り当て
-	VkBuffer       m_IndexBuffer;           // インデックスバッファー
-	VkDeviceMemory m_IndexBufferMemory;     // インデックスバッファーメモリー割り当て
+	VkBuffer                        m_VertexBuffer;          // 頂点バッファー
+	VkDeviceMemory                  m_VertexBufferMemory;    // 頂点バッファーメモリー割り当て
+	VkBuffer                        m_IndexBuffer;           // インデックスバッファー
+	VkDeviceMemory                  m_IndexBufferMemory;     // インデックスバッファーメモリー割り当て
 
-	std::vector<VkBuffer>          m_UniformBuffers;
-	std::vector<VkDeviceMemory>    m_UniformBuffersMemory;
+	std::vector<VkBuffer>           m_UniformBuffers;
+	std::vector<VkDeviceMemory>     m_UniformBuffersMemory;
 
-	// テクスチャーマッピング用（Texel情報）
-	VkImage                        m_TextureImage;
-	VkDeviceMemory                 m_TextureImageMemory;
-	VkImageView                    m_TextureImageView;
-	VkSampler                      m_TextureSampler;
+	VkImage                         m_DepthImage;            // Zソートなどのデプスバッファリング用　Depth Buffering
+	VkDeviceMemory                  m_DepthImageMemory;
+	VkImageView                     m_DepthImageView;
+
+	VkImage                         m_TextureImage;          // テクスチャーマッピング用（Texel情報、など）
+	VkDeviceMemory                  m_TextureImageMemory;
+	VkImageView                     m_TextureImageView;
+	VkSampler                       m_TextureSampler;
 
 	// Semaphore：簡単に「シグナル」。処理を同期するために利用します。
 	// Fence: GPU-CPUの間の同期機能；ゲート見たいなストッパーである。
-	std::vector<VkSemaphore>    m_ImageAvailableSemaphores;    // イメージ描画準備完了セマフォ
-	std::vector<VkSemaphore>    m_RenderFinishedSemaphores;    // レンダリング完了セマフォ
-	std::vector<VkFence>        m_InFlightFences;              // 起動中のフェンス
-	std::vector<VkFence>        m_ImagesInFlight;              // 処理中の画像
-	size_t                      m_CurrentFrame = 0;            // 現在こフレームカウンター
+	std::vector<VkSemaphore>        m_ImageAvailableSemaphores;    // イメージ描画準備完了セマフォ
+	std::vector<VkSemaphore>        m_RenderFinishedSemaphores;    // レンダリング完了セマフォ
+	std::vector<VkFence>            m_InFlightFences;              // 起動中のフェンス
+	std::vector<VkFence>            m_ImagesInFlight;              // 処理中の画像
+	size_t                          m_CurrentFrame = 0;            // 現在こフレームカウンター
 	
 	bool m_FramebufferResized = false;    // ウウィンドウサイズが変更したか
 
@@ -370,7 +385,8 @@ private:
 		createRenderPass();             // レンダーパス
 		createDescriptorSetLayout();    // リソースでスクリプターレイアウト 
 		createGraphicsPipeline();       // グラフィックスパイプライン生成
-		createFramebuffers();           // フレームバッファ生成
+		createDepthResources();         // デプスリソース生成
+		createFramebuffers();           // フレームバッファ生成（デプスリソースの後）
 		createCommandPool();            // コマンドバッファーを格納するプールを生成
 		createTextureImage();           // テクスチャーマッピング用画像生成
 		createTextureImageView();       // テクスチャーをアクセスするためのイメージビュー生成
@@ -786,7 +802,7 @@ private:
 		m_SwapChainImageViews.resize(m_SwapChainImages.size());    // イメージカウントによってベクトルサイズを変更する allocate enough size to fit all image views 					
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
-			m_SwapChainImageViews[i] = createImageView(m_SwapChainImages[i], m_SwapChainImageFormat);
+			m_SwapChainImageViews[i] = createImageView(m_SwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	}
 
@@ -824,26 +840,45 @@ private:
 		colorAttachmentReference.attachment = 0;    // attachment reference index; 0 = first index (only one attachment for now)
 		colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+		// デプスアタッチメント
+		VkAttachmentDescription depthAttachment{};
+		depthAttachment.format = findDepthFormat();
+		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		// デプスアタッチメントレファレンス
+		VkAttachmentReference depthAttachmentReference{};
+		depthAttachmentReference.attachment = 1;
+		depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;    // アタッチメントと同じ
+
 		// サブパス
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentReference;
+		subpass.pDepthStencilAttachment = &depthAttachmentReference;
 
 		// サブパス依存関係
 		VkSubpassDependency dependency{};
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependency.dstSubpass = 0;    // サブパスインデックス 0 subpass index 0 (our first and only subpass)
-		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 		dependency.srcAccessMask = 0;
-		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 		// レンダーパス情報構造体生成
+		// attachments：createCommandBuffers()のclearValues順番と同じにすること
+		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };    
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		renderPassInfo.attachmentCount = 1;
-		renderPassInfo.pAttachments = &colorAttachment;
+		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		renderPassInfo.pAttachments = attachments.data();
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
 		renderPassInfo.dependencyCount = 1;
@@ -1004,8 +1039,22 @@ private:
 		multisampling.alphaToCoverageEnable = VK_FALSE;     // 任意 optional
 		multisampling.alphaToOneEnable = VK_FALSE;          // 任意 optionall
 
-		// 6.)　デプス・ステンシル（現在なし） 
-		// Depth and Stencil Testing (revisit later)
+		// 6.)　デプス・ステンシル
+		// Depth and Stencil Testing 
+
+		VkPipelineDepthStencilStateCreateInfo depthStencil{};
+		depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		depthStencil.depthTestEnable = VK_TRUE;     // 新しいフラグメントのデプスをデプスバッファーと比較するか（discard)
+		depthStencil.depthWriteEnable = VK_TRUE;    // デプステストを合格したフラグメントのデプスをデプスバッファーに書き込むか
+
+		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;    // デプスが低い：近い
+		depthStencil.depthBoundsTestEnable = VK_FALSE;       // デプスバウンドテスト用（TRUE: Bounds内のフラグメントしか保留しません）
+		depthStencil.minDepthBounds = 0.0f;                  // 任意 optional
+		depthStencil.maxDepthBounds = 1.0f;                  // 任意 optional
+
+		depthStencil.stencilTestEnable = VK_FALSE;           // ステンシルバッファー用
+		depthStencil.front = {};                             // 任意 optional
+		depthStencil.back = {};                              // 任意 optional  
 
 		// 7.) カラーブレンディング：①フレームバッファーの既存の色と混ぜるか、②前と新しい値をBitwise演算で合成するか
 		// Color Blending: Either ① mix the old value (in the framebuffer) and new value, or ② perform a bitwise operation with the two values
@@ -1105,7 +1154,7 @@ private:
 		pipelineInfo.pViewportState = &viewportState;
 		pipelineInfo.pRasterizationState = &rasterizer;
 		pipelineInfo.pMultisampleState = &multisampling;
-		pipelineInfo.pDepthStencilState = nullptr;        // 任意 optional
+		pipelineInfo.pDepthStencilState = &depthStencil; 
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = nullptr;             // 任意 optional
 
@@ -1148,16 +1197,16 @@ private:
 
 		for (size_t i = 0; i < m_SwapChainImageViews.size(); i++)
 		{
-			VkImageView attachments[] = 
+			std::array<VkImageView, 2> attachments = 
 			{
-				m_SwapChainImageViews[i]
+				m_SwapChainImageViews[i], m_DepthImageView
 			};
 
 			VkFramebufferCreateInfo framebufferInfo{};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 			framebufferInfo.renderPass = m_RenderPass;          // フレームバッファーと相当する設定 compatibility with framebuffer settings
-			framebufferInfo.attachmentCount = 1;                // レンダーパスの値 render pass pAtachment
-			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+			framebufferInfo.pAttachments = attachments.data();
 			framebufferInfo.width = m_SwapChainExtent.width;
 			framebufferInfo.height = m_SwapChainExtent.height;
 			framebufferInfo.layers = 1;                         // 1: 1つのイメージしかない場合 Swap chain images as single images
@@ -1185,6 +1234,57 @@ private:
 		{
 			throw std::runtime_error("Failed to create graphics command pool!");
 		}
+	}
+
+	void createDepthResources()
+	{
+		VkFormat depthFormat = findDepthFormat();
+		createImage(
+			m_SwapChainExtent.width, m_SwapChainExtent.height,
+			depthFormat,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			m_DepthImage,
+			m_DepthImageMemory
+		);
+		m_DepthImageView = createImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+	}
+
+	// サポートされている（適用できる）一番理想なフォーマットを検索します（TilingとFeaturesによって異なります）
+	VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+	{
+		for (VkFormat format : candidates)
+		{
+			VkFormatProperties properties;
+			vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &properties);
+
+			if (tiling == VK_IMAGE_TILING_LINEAR && (properties.linearTilingFeatures & features) == features)
+			{
+				return format;
+			}
+			else if (tiling == VK_IMAGE_TILING_OPTIMAL && (properties.optimalTilingFeatures & features) == features)
+			{
+				return format;
+			}
+		}
+		throw std::runtime_error("Failed to find supported format!");
+	}
+
+	// デプスフォーマットを検索します
+	VkFormat findDepthFormat()
+	{
+		return findSupportedFormat(
+			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+		);
+	}
+
+	// 渡したデプスフォーマットがステンシルコンポーネントがついているか
+	bool hasStencilComponent(VkFormat format)
+	{
+		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
 	// イメージ（画像）生成
@@ -1229,7 +1329,7 @@ private:
 	}
 
 	// helper function
-	VkImageView createImageView(VkImage image, VkFormat format)
+	VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 	{
 		VkImageViewCreateInfo viewInfo{};
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1237,7 +1337,7 @@ private:
 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		viewInfo.format = format;
 
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.aspectMask = aspectFlags;
 		viewInfo.subresourceRange.baseMipLevel = 0;
 		viewInfo.subresourceRange.levelCount = 1;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -1328,7 +1428,7 @@ private:
 	// createTextureImage()の画像をアクセスするイメージビューを生成
 	void createTextureImageView()
 	{
-		m_TextureImageView = createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB);
+		m_TextureImageView = createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 	}
 
 	// Filtering (Bilinear, Anisotropicなど)、AddressingModeなどのテクスチャーサンプラー生成
@@ -1438,21 +1538,17 @@ private:
 		VkPipelineStageFlags sourceStage;
 		VkPipelineStageFlags destinationStage;
 
-		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED
-			&& newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 		{
 			barrier.srcAccessMask = 0;
 			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
 			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		}
-		else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-			&& newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 		{
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
 			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		}
@@ -1800,9 +1896,13 @@ private:
 			// match render area to size of attachments for best performance
 			renderPassInfo.renderArea.extent = m_SwapChainExtent;	
 
-			VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };    // 黒
-			renderPassInfo.clearValueCount = 1;                      // VK_ATTACHMENT_LOAD_OP_CLEARのクリア値 (clearColor)
-			renderPassInfo.pClearValues = &clearColor;
+			// createRenderPass(): VK_ATTACHMENT_LOAD_OP_CLEARのクリア値 (clearColor)
+			std::array<VkClearValue, 2> clearValues{};    
+			clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };    // 黒
+			clearValues[1].depthStencil = { 1.0f, 0 };            // デプスステンシルクリア値 (1.0f: ファー Far Plane)
+
+			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());                   
+			renderPassInfo.pClearValues = clearValues.data();
 
 			// 実際のレンダーパスを開始します
 			vkCmdBeginRenderPass(m_CommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);	
