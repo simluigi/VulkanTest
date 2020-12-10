@@ -418,6 +418,10 @@ private:
 	// before recreating swap chain, call this to clean up older versions of it
 	void cleanupSwapChain()
 	{
+		vkDestroyImageView(m_LogicalDevice, m_DepthImageView, nullptr);
+		vkDestroyImage(m_LogicalDevice, m_DepthImage, nullptr);
+		vkFreeMemory(m_LogicalDevice, m_DepthImageMemory, nullptr);
+
 		for (VkFramebuffer framebuffer : m_SwapChainFramebuffers)
 		{
 			vkDestroyFramebuffer(m_LogicalDevice, framebuffer, nullptr);
@@ -516,6 +520,7 @@ private:
 		createImageViews();         // SwapChain内の画像に依存する
 		createRenderPass();         // SwapChain内の画像のフォーマットに依存する
 		createGraphicsPipeline();   // ビューポート、Scissorに依存する
+		createDepthResources();     // デプスバッファーレゾルーションがウインドウリサイズに合わせます
 		createFramebuffers();       // SwapChain内の画像に依存する
 		createUniformBuffers();     // SwapChain内の画像に依存する
 		createDescriptorPool();     // SwapChain内の画像に依存する
