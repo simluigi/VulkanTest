@@ -4,8 +4,8 @@ Author:			Sim Luigi
 Last Modified:	2020.12.10
 
 Current Page:
-https://vulkan-tutorial.com/en/Depth_buffering
-Depth buffering (Handling Window Size)
+https://vulkan-tutorial.com/Loading_models
+Loading Models(complete!)
 
 2020.12.06:		今までのソースコードに日本語コメント欄を追加しました。
 
@@ -66,17 +66,21 @@ Depth buffering (Handling Window Size)
 #define GLFW_INCLUDE_VULKAN    // VulkanSDKをGLFWと一緒にインクルードします。
 #include <GLFW/glfw3.h>        // replaces #include <vulkan/vulkan.h> and automatically bundles it with glfw include
 
-#define GLM_FORCE_RADIANS                   // glm::rotate関数をラジアンで処理する設定
+#define TINYOBJLOADER_IMPLEMENTATION        // tinyobjloaderモデル読み込み
+#include <tiny_obj_loader.h>
 
+#define GLM_ENABLE_EXPERIMENTAL             // glm::hash
+#define GLM_FORCE_RADIANS                   // glm::rotate関数をラジアンで処理する設定
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE	        // GLMのプロジェクションマトリックスのZソート値は -1.0～1.0（OpenGL対応のため）
                                             // Vulkan対応にするために 0.0～1.0 に設定する必要があります
                                             // GLM uses depth ranges of -1.0 to 1.0 in accordance with OpenGL standards.
-                                            // To use GLM projection matrices in Vulkan for depth buffering, we need to set values to 0.0 to 1.0
+                                            // To use GLM projection matrices in Vulkan for depth buffering, set values to 0.0～1.0
 
 #include <glm/glm.hpp>                      // glmインクルード
 #include <glm/gtc/matrix_transform.hpp>     // モデルトランスフォーム              glm::rotate, glm::scale  
                                             // ビュートランスフォーム              glm::lookAt
                                             // プロジェクショントランスフォーム    glm::perspective
+#include <glm/gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -89,6 +93,7 @@ Depth buffering (Handling Window Size)
 #include <set>          // std::set
 #include <array>        // std::array
 #include <map>          // std::map
+#include <unordered_map>// std::unordered_map 頂点重複を避けるため
 #include <cstring>      // strcpy, など
 #include <optional>     // C++17 and above
 #include <algorithm>    // std::min/max : chooseSwapExtent()
@@ -100,6 +105,9 @@ Depth buffering (Handling Window Size)
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
+
+const std::string MODEL_PATH = "Asset/Model/viking_room.obj";
+const std::string TEXTURE_PATH = "Asset/Texture/viking_room.png";
 
 // 同時に処理されるフレームの最大数 
 // how many frames should be processed concurrently 
@@ -222,7 +230,28 @@ struct Vertex
 
 		return attributeDescriptions;
 	}
+
+	// オペレータオーバーライド: == (同一)、頂点用
+	// Operator Override for vertex comparison: equals == 
+	bool operator==(const Vertex& other) const
+	{
+		return pos == other.pos && color == other.color && texCoord == other.texCoord;
+	}
 };
+
+// 超手重複フィルターハッシュ関数（後でもっと勉強すること）
+// Hash function for filtering duplicate vertices (study this later!)
+namespace std 
+{
+	template<> struct hash<Vertex>
+	{
+		size_t operator() (Vertex const& vertex) const
+		{
+			return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
+		}
+	};
+}
+
 
 // UBO (UniformBufferObject): マトリクス変換情報・MVP Transform
 struct UniformBufferObject
@@ -232,27 +261,6 @@ struct UniformBufferObject
 	alignas(16) glm::mat4 proj;
 };
 
-
-// 頂点データインターリーブ
-// Vertex Attribute Interleave
-const std::vector<Vertex> vertices = 
-{
-	{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-	{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-	{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-	{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-	{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-	{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-	{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-	{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-};
-
-const std::vector<uint16_t> indices = // uint16_t for now since using less than 65535 unique vertices
-{
-	0, 1, 2, 2, 3, 0,
-	4, 5, 6, 6, 7, 4
-};
 
 // Vulkan上のあらゆる処理はキューで処理されています。処理によってキューの種類も異なります。
 struct QueueFamilyIndices
@@ -326,6 +334,9 @@ private:
 	VkDescriptorPool                m_DescriptorPool;        // DescriptorPool : デスクリプターセット、そしてその割り当てたメモリ管理
 	std::vector<VkDescriptorSet>    m_DescriptorSets;
 
+	std::vector<Vertex>             m_Vertices;              // 頂点データ（モデル用）
+	std::vector<uint32_t>           m_Indices;               // インデックスデータ（モデル用）
+
 	VkBuffer                        m_VertexBuffer;          // 頂点バッファー
 	VkDeviceMemory                  m_VertexBufferMemory;    // 頂点バッファーメモリー割り当て
 	VkBuffer                        m_IndexBuffer;           // インデックスバッファー
@@ -391,6 +402,7 @@ private:
 		createTextureImage();           // テクスチャーマッピング用画像生成
 		createTextureImageView();       // テクスチャーをアクセスするためのイメージビュー生成
 		createTextureSampler();         // テクスチャーサンプラー生成
+		loadModel();                    // モデルデータを読み込み
 		createVertexBuffer();           // 頂点バッファー生成
 		createIndexBuffer();		    // インデックスバッファー生成
 		createUniformBuffers();         // ユニフォームバッファー生成
@@ -1024,7 +1036,9 @@ private:
 		rasterizer.lineWidth = 1.0f;    // ラインの厚さ（ピクセル単位）Line thickness (in pixels)
 		// ※1.0以上の厚さの場合、特定なGPU機能をオンにする必要があります。Using line width greater than 1.0f requires enabling a GPU feature.
 
-		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;                // カリング設定（通常：BackfaceCulling)
+		rasterizer.cullMode = VK_CULL_MODE_NONE;                    // カリング設定（通常：BackfaceCulling)
+		                                                            // VK_CULL_MODE_BACK_BIT
+
 		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;     // 頂点の順番により表面・裏面を判断する設定（時計回り・反時計回り）
 		                                                            // determines front-facing by vertex order (CLOCKWISE or COUNTER_CLOCKWISE) 
 		rasterizer.depthBiasEnable = VK_FALSE;        // VK_TRUE: Depth値調整（シャドウマッピング）Adjusting depth values i.e. for shadow mapping
@@ -1363,7 +1377,7 @@ private:
 		int texWidth, texHeight, texChannels;
 		
 		// STBI_rgb_alpha: αチャネルがない場合、自動的に追加します。
-		stbi_uc* pixels = stbi_load("Asset/Texture/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
 
 		if (!pixels)
@@ -1611,12 +1625,57 @@ private:
 		vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, 1, &commandBuffer);
 	}
 
+	void loadModel()
+	{
+		tinyobj::attrib_t attrib;
+		std::vector<tinyobj::shape_t> shapes;
+		std::vector<tinyobj::material_t> materials;
+		std::string warn, error;
+
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &error, MODEL_PATH.c_str()))    // Triangulate Faces by default
+		{
+			throw std::runtime_error(warn + error);
+		}
+
+		std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+		// Iterate over all the shapes to combine all the faces into a single model
+		for (const auto& shape : shapes)
+		{
+			for (const auto& index : shape.mesh.indices)
+			{
+				Vertex vertex{};
+
+				vertex.pos = {
+				attrib.vertices[3 * index.vertex_index + 0],
+				attrib.vertices[3 * index.vertex_index + 1],
+				attrib.vertices[3 * index.vertex_index + 2]
+				};
+
+				vertex.texCoord = {
+					attrib.texcoords[2 * index.texcoord_index + 0],
+					1.0 - attrib.texcoords[2 * index.texcoord_index + 1]
+				};
+
+				vertex.color = { 1.0f, 1.0f, 1.0f };
+
+				// 頂点重複フィルター
+				if (uniqueVertices.count(vertex) == 0)
+				{
+					uniqueVertices[vertex] = static_cast<uint32_t>(m_Vertices.size());
+					m_Vertices.push_back(vertex);
+				}
+				m_Indices.push_back(uniqueVertices[vertex]);
+			}
+		}
+		std::cout << m_Vertices.size() << std::endl;
+	}
 
 	// 頂点バッファー生成
 	void createVertexBuffer()
 	{
 		// 頂点単位 ＊　配列の要素数
-		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+		VkDeviceSize bufferSize = sizeof(m_Vertices[0]) * m_Vertices.size();
 
 		// ステージングバッファー：CPUメモリー上臨時バッファー。頂点データに渡され、最終的な頂点バッファーに渡します。
 		// Staging buffer: temporary buffer in CPU memory that takes in vertex array and sends it to the final vertex buffer
@@ -1633,7 +1692,7 @@ private:
 		
 		// 情報をメモリーにマップ
 		vkMapMemory(m_LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-			memcpy(data, vertices.data(), (size_t)bufferSize);
+			memcpy(data, m_Vertices.data(), (size_t)bufferSize);
 		vkUnmapMemory(m_LogicalDevice, stagingBufferMemory);
 		
 		// 頂点バッファーを生成します
@@ -1656,7 +1715,7 @@ private:
 	void createIndexBuffer()
 	{
 		// インデックス単位　＊　配列の要素数
-		VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();    // 変更点　①、②
+		VkDeviceSize bufferSize = sizeof(m_Indices[0]) * m_Indices.size();    // 変更点　①、②
 
 		// ステージングバッファー：頂点バッファーと同じ
 		VkBuffer stagingBuffer;
@@ -1670,7 +1729,7 @@ private:
 
 		void* data;	
 		vkMapMemory(m_LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-		memcpy(data, indices.data(), (size_t)bufferSize);        // 変更点　③ vertices.data() --> indices.data()
+		memcpy(data, m_Indices.data(), (size_t)bufferSize);        // 変更点　③ vertices.data() --> indices.data()
 		vkUnmapMemory(m_LogicalDevice, stagingBufferMemory);
 
 		// インデックスバッファーを生成します
@@ -1921,7 +1980,7 @@ private:
 			vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, vertexBuffers, offsets);
 
 			// インデックスバッファー
-			vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);    // VK_INDEX_TYPE_UINT32
+			vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);    // VK_INDEX_TYPE_UINT16
 
 			// デスクリプターセットをバインドします
 			vkCmdBindDescriptorSets(
@@ -1936,7 +1995,7 @@ private:
 				;
 
 			// 描画コマンド（インデックスバッファー）
-			vkCmdDrawIndexed(m_CommandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+			vkCmdDrawIndexed(m_CommandBuffers[i], static_cast<uint32_t>(m_Indices.size()), 1, 0, 0, 0);
 			// 引数①：コマンドバッファー
 			//     ②：頂点数（頂点バッファーなしでも頂点を描画しています。）
 			//     ③：インスタンス数（インスタンスレンダリング用）
