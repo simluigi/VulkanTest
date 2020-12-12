@@ -1,5 +1,5 @@
 .vs/
-copy.cpp
+copy*.*
 x64/
 Debug/
 Release/
