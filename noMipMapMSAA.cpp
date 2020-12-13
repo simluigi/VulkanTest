@@ -1,19 +1,19 @@
 /*======================================================================
 Vulkan Tutorial
 Author:			Sim Luigi
-Last Modified:	2020.12.13
+Last Modified:	2020.12.10
 
 Current Page:
-https://vulkan-tutorial.com/en/Multisampling
-MSAA: MultiSampling Anti-Aliasing (complete!)
+https://vulkan-tutorial.com/en/Generating_Mipmaps
+Generating Mipmaps
 
 2020.12.06:		今までのソースコードに日本語コメント欄を追加しました。
 
 << 気づいたこと・メモ >>　※間違っている場合、教えていただければ幸いです。
 
 ＊　VulkanAPIのネーミングコンベンションについて：
-	
-	小文字「 k 」： 関数          vkCreateInstance()   
+
+	小文字「 k 」： 関数          vkCreateInstance()
 	大文字「 K 」： データ型      VkInstance
 	全て大文字　 ： マクロ        VK_KHR_SWAPCHAIN_EXTENSION_NAME
 
@@ -22,7 +22,7 @@ MSAA: MultiSampling Anti-Aliasing (complete!)
 
 ＊　Vulkan上のオブジェクトを生成するとき、ほとんど以下の段階で実装します。
 
-                                                                  例：インスタンス	
+																  例：インスタンス
 	1.) オブジェクト情報構造体「CreateInfo」を作成します。        VkInstanceCreateInfo createInfo{};
 	2.) 構造体の種類を選択します。                                createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	3.) 構造体の設定・フラッグを定義します。                      createInfo.flags = 0;
@@ -30,7 +30,7 @@ MSAA: MultiSampling Anti-Aliasing (complete!)
 
 ＊	Vulkan専用のデバッグ機能「Validation Layer」「バリデーションレイヤー」について：
 	複雑ですが、簡単にイメージすると、画像編集ソフト（Photoshop、GIMPなど）のレイヤーと同じように重ねているの方が想像しやすいです。
-	
+
 	例：処理A
 	　→レイヤー①：正常
 		→レイヤー②：正常
@@ -72,21 +72,21 @@ MSAA: MultiSampling Anti-Aliasing (complete!)
 #define GLM_ENABLE_EXPERIMENTAL             // glm型のHash
 #define GLM_FORCE_RADIANS                   // glm::rotate関数をラジアンで処理する設定
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE	        // GLMのプロジェクションマトリックスのZソート値は -1.0～1.0（OpenGL対応のため）
-                                            // Vulkan対応にするために 0.0～1.0 に設定する必要があります
-                                            // GLM uses depth ranges of -1.0 to 1.0 in accordance with OpenGL standards.
-                                            // To use GLM projection matrices in Vulkan for depth buffering, set values to 0.0～1.0
+// Vulkan対応にするために 0.0～1.0 に設定する必要があります
+// GLM uses depth ranges of -1.0 to 1.0 in accordance with OpenGL standards.
+// To use GLM projection matrices in Vulkan for depth buffering, set values to 0.0～1.0
 
 #include <glm/glm.hpp>                      // glmインクルード
 #include <glm/gtc/matrix_transform.hpp>     // モデルトランスフォーム              glm::rotate, glm::scale  
-                                            // ビュートランスフォーム              glm::lookAt
-                                            // プロジェクショントランスフォーム    glm::perspective
+											// ビュートランスフォーム              glm::lookAt
+											// プロジェクショントランスフォーム    glm::perspective
 #include <glm/gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 #include <chrono>       // 時間管理；フレームレートに関わらずジオメトリーが90°回転させます
-                        // time manager: will allow us to rotate geometry 90 degress regardless of frame rate
+						// time manager: will allow us to rotate geometry 90 degress regardless of frame rate
 
 #include <iostream>     // 基本I/O
 #include <vector>       // std::vector
@@ -111,11 +111,11 @@ const std::string TEXTURE_PATH = "Asset/Texture/viking_room.png";
 
 // 同時に処理されるフレームの最大数 
 // how many frames should be processed concurrently 
-const int MAX_FRAMES_IN_FLIGHT = 2;		
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 // Vulkanのバリデーションレイヤー：SDK上のエラーチェック仕組み
 // Vulkan Validation layers: SDK's own error checking implementation
-const std::vector<const char*> validationLayers =				
+const std::vector<const char*> validationLayers =
 {
 	"VK_LAYER_KHRONOS_validation"
 };
@@ -174,13 +174,13 @@ void DestroyDebugUtilsMessengerEXT(
 struct Vertex
 {
 	// glmライブラリーがシェーダーコードに合ってるC++データ型を用意してくれます。
-	glm::vec3 pos;		
+	glm::vec3 pos;
 	glm::vec3 color;
 	glm::vec2 texCoord;
 
 	// シェーダー情報がGPUに読み込まれた後、頂点シェーダーに渡す関数2つ
 	// Two functions to tell Vulkan how to pass the shader data once it's been uploaded to the GPU
- 
+
 	// ① 頂点バインディング：情報の読み込む率　（stride, 頂点ごと・インスタンスごと）
 	// Vertex Binding: Which rate to load data from memory throughout the vertices (stride, by vertex or by instance)
 	static VkVertexInputBindingDescription getBindingDescription()
@@ -201,8 +201,8 @@ struct Vertex
 
 		// attributeDescriptions[0]: 位置情報　Position
 		// bindingDescriptionと同じ値: 頂点シェーダー (location = 0) in	
-		attributeDescriptions[0].binding = 0;	
-		attributeDescriptions[0].location = 0;			
+		attributeDescriptions[0].binding = 0;
+		attributeDescriptions[0].location = 0;
 		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;    // 3Dジオメトリー	
 		attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
@@ -211,12 +211,12 @@ struct Vertex
 		// vec2  : VK_FORMAT_R32G32_SFLOAT
 		// vec3  : VK_FORMAT_R32G32B32_SFLOAT
 		// vec4  : VK_FORMAT_R32G32B32A32_SFLOAT
-																		
+
 		// カラータイプ（SFLOAT、UINT、SINT)もShaderInputに合わせる必要があります。
 		// ivec2  : VK_FORMAT_R32G32_SINT		（int 32ビット vec2)
 		// uvec4  : VK_FORMAT_R32G32B32A32_UINT （unsigned 32ビット vec4)
 		// double : VK_FORMAT_R64_SFLOAT		（ダブルプレシジョン64ビット float
-		
+
 		// attributeDescriptions[1]: カラー情報　Color　（上記とほぼ同じ）
 		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].location = 1;
@@ -241,14 +241,14 @@ struct Vertex
 
 // 頂点重複除きハッシュ関数（後でもっと勉強すること）
 // Hash function for filtering duplicate vertices (study this later!)
-namespace std 
+namespace std
 {
 	template<> struct hash<Vertex>
 	{
 		size_t operator() (Vertex const& vertex) const
 		{
-			return ((hash<glm::vec3>()(vertex.pos) 
-				^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) 
+			return ((hash<glm::vec3>()(vertex.pos)
+				^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1)
 				^ (hash<glm::vec2>()(vertex.texCoord) << 1);
 		}
 	};
@@ -273,7 +273,7 @@ struct QueueFamilyIndices
 	std::optional<uint32_t> presentFamily;    // プレゼント（描画）キュー
 
 	// キューの各値がちゃんと存在しているか　check if value exists for all values
-	bool isComplete()							
+	bool isComplete()
 	{
 		return graphicsFamily.has_value() && presentFamily.has_value();
 	}
@@ -293,7 +293,7 @@ struct SwapChainSupportDetails
 class HelloTriangleApplication
 {
 public:
-	void run()	
+	void run()
 	{
 		initWindow();
 		initVulkan();
@@ -303,13 +303,11 @@ public:
 
 private:
 
-	// クラスメンバー  Class Members
-
 	GLFWwindow*                     m_Window;                // WINDOWSではなくGLFW;　クロスプラットフォーム対応
 	VkInstance                      m_Instance;              // インスタンス：アプリケーションとSDKのつながり
-	
+
 	VkDebugUtilsMessengerEXT        m_DebugMessenger;        // デバッグコールバック
-	
+
 	VkSurfaceKHR                    m_Surface;               // GLFW -> WSI (Windows System Integration) -> ウィンドウ生成
 
 	VkPhysicalDevice    m_PhysicalDevice = VK_NULL_HANDLE;   // 物理デバイス（GPU・グラフィックスカード）
@@ -332,7 +330,7 @@ private:
 	VkPipeline                      m_GraphicsPipeline;      // グラフィックスパイプライン自体
 
 	VkCommandPool                   m_CommandPool;           // CommandPool : コマンドバッファー、そしてその割り当てたメモリ管理、
-	std::vector<VkCommandBuffer>    m_CommandBuffers;		
+	std::vector<VkCommandBuffer>    m_CommandBuffers;
 
 	VkDescriptorPool                m_DescriptorPool;        // DescriptorPool : デスクリプターセット、そしてその割り当てたメモリ管理
 	std::vector<VkDescriptorSet>    m_DescriptorSets;
@@ -357,11 +355,6 @@ private:
 	VkDeviceMemory                  m_TextureImageMemory;
 	VkImageView                     m_TextureImageView;
 	VkSampler                       m_TextureSampler;
-	
-	VkSampleCountFlagBits           m_MSAASamples = VK_SAMPLE_COUNT_1_BIT;    // マルチサンプリングビット数  Multisampling bit count 
-	VkImage                         m_ColorImage;                             // マルチサンプリングバッファー用
-	VkDeviceMemory                  m_ColorImageMemory;                       // マルチサンプリングバッファー用
-	VkImageView                     m_ColorImageView;                         // マルチサンプリングバッファー用
 
 	// Semaphore：簡単に「シグナル」。処理を同期するために利用します。
 	// Fence: GPU-CPUの間の同期機能；ゲート見たいなストッパーである。
@@ -370,7 +363,7 @@ private:
 	std::vector<VkFence>            m_InFlightFences;              // 起動中のフェンス
 	std::vector<VkFence>            m_ImagesInFlight;              // 処理中の画像
 	size_t                          m_CurrentFrame = 0;            // 現在こフレームカウンター
-	
+
 	bool m_FramebufferResized = false;    // ウウィンドウサイズが変更したか
 
 	void initWindow()
@@ -405,7 +398,6 @@ private:
 		createRenderPass();             // レンダーパス
 		createDescriptorSetLayout();    // リソースでスクリプターレイアウト 
 		createGraphicsPipeline();       // グラフィックスパイプライン生成
-		createColorResources();         // カラーリソース生成（MSAA)
 		createDepthResources();         // デプスリソース生成
 		createFramebuffers();           // フレームバッファ生成（デプスリソースの後）
 		createCommandPool();            // コマンドバッファーを格納するプールを生成
@@ -430,20 +422,16 @@ private:
 			glfwPollEvents();    // イベント待機  Update/event checker
 			drawFrame();         // フレーム描画
 		}
-		
+
 		// プログラム終了（後片付け）の前に、既に動いている処理を済ませます。
 		// let logical device finish operations before exiting the main loop 
-		vkDeviceWaitIdle(m_LogicalDevice);	
+		vkDeviceWaitIdle(m_LogicalDevice);
 	}
 
 	// SwapChainを再生成する前に古いSwapChainを削除する関数
 	// before recreating swap chain, call this to clean up older versions of it
 	void cleanupSwapChain()
 	{
-		vkDestroyImageView(m_LogicalDevice, m_ColorImageView, nullptr);
-		vkDestroyImage(m_LogicalDevice, m_ColorImage, nullptr);
-		vkFreeMemory(m_LogicalDevice, m_ColorImageMemory, nullptr);
-
 		vkDestroyImageView(m_LogicalDevice, m_DepthImageView, nullptr);
 		vkDestroyImage(m_LogicalDevice, m_DepthImage, nullptr);
 		vkFreeMemory(m_LogicalDevice, m_DepthImageMemory, nullptr);
@@ -500,7 +488,7 @@ private:
 		vkFreeMemory(m_LogicalDevice, m_VertexBufferMemory, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		{		
+		{
 			vkDestroySemaphore(m_LogicalDevice, m_RenderFinishedSemaphores[i], nullptr);
 			vkDestroySemaphore(m_LogicalDevice, m_ImageAvailableSemaphores[i], nullptr);
 			vkDestroyFence(m_LogicalDevice, m_InFlightFences[i], nullptr);
@@ -524,6 +512,7 @@ private:
 	// SwapChainがウィンドウサーフェスに対応していない場合（ウインドウリサイズ）、SwapChainを再生成
 	// 必要があります。SwapChain又はウィンドウサイズに依存するオブジェクトはSwapChainと同時に
 	// 再生成しないといけません。
+
 	// Recreate swap chain and all creation functions for the object that depend on the swap chain or the window size.
 	// This step is to be implemented when the swap chain is no longer compatible with the window surface;
 	// i.e. window size changing (and thus the extent values are no longer consistent)
@@ -542,21 +531,20 @@ private:
 		cleanupSwapChain();         // SwapChainの後片付け
 
 		createSwapChain();          // SwapChain自体を再生成
-		createImageViews();         // SwapChain内の画像に依存
-		createRenderPass();         // SwapChain内の画像のフォーマットに依存
-		createGraphicsPipeline();   // ビューポート、Scissorに依存
-		createColorResources();     // 描画処理に影響します 
+		createImageViews();         // SwapChain内の画像に依存する
+		createRenderPass();         // SwapChain内の画像のフォーマットに依存する
+		createGraphicsPipeline();   // ビューポート、Scissorに依存する
 		createDepthResources();     // デプスバッファーレゾルーションがウインドウリサイズに合わせます
-		createFramebuffers();       // SwapChain内の画像に依存
-		createUniformBuffers();     // SwapChain内の画像に依存
-		createDescriptorPool();     // SwapChain内の画像に依存
-		createDescriptorSets();     // SwapChain内の画像に依存
-		createCommandBuffers();     // SwapChain内の画像に依存
+		createFramebuffers();       // SwapChain内の画像に依存する
+		createUniformBuffers();     // SwapChain内の画像に依存する
+		createDescriptorPool();     // SwapChain内の画像に依存する
+		createDescriptorSets();     // SwapChain内の画像に依存する
+		createCommandBuffers();     // SwapChain内の画像に依存する
 	}
 
 	// Vulkanインスタンス生成 （Vulkanドライバーに重要な情報を渡します）
 	// may provide useful information to the Vulkan driver
-	void createInstance()	
+	void createInstance()
 	{
 		if (enableValidationLayers && !checkValidationLayerSupport())    // デバッグモードの設定でバリデーションレイヤー機能がサポートされない場合
 		{
@@ -581,9 +569,9 @@ private:
 
 		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
 
-		// デバッグモードオンの場合、バリデーションレイヤー名を定義します
+		// デバッグモードオンの場合、バリデーションレイヤー名を定義する
 		// if validation layers is on (debug mode), include validation layer names in instantiation
-		if (enableValidationLayers)		
+		if (enableValidationLayers)
 		{
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 			createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -607,8 +595,9 @@ private:
 	// デバッグコールバック
 	// messageSeverity: エラーの重要さ；比較オペレータで比べられます。
 	// 例：if (messageSeverity >= VK_DEUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) の場合、そのWARNINGのレベル以上のみを表示する。
+
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,		  
+		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
 		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,    // VkDebugUtilsMesengerCallbackDataEXT メッセージ自体の構造体
 		void* pUserData)                                              // pointer that was specified during the setup of callback, allowing you to pass your own data to it
@@ -632,7 +621,6 @@ private:
 
 	}
 
-	// デバッグメッセージ設定
 	void setupDebugMessenger()
 	{
 		if (enableValidationLayers == false)    // デバッグモードではない場合、無視します  Only works in debug mode
@@ -675,7 +663,6 @@ private:
 			if (isDeviceSuitable(device) == true)
 			{
 				m_PhysicalDevice = device;
-				m_MSAASamples = getMaxUseableSampleCount();   // 選択したサンプルビットの最大数を獲得
 				break;
 			}
 		}
@@ -687,7 +674,7 @@ private:
 	}
 
 	// ロジカルデバイス生成
-	void createLogicalDevice()				
+	void createLogicalDevice()
 	{
 		QueueFamilyIndices indices = findQueueFamilies(m_PhysicalDevice);    // ロジカルデバイスキュー準備　Preparing logical device queue
 
@@ -696,7 +683,7 @@ private:
 		{ indices.graphicsFamily.value(), indices.presentFamily.value() };	 // キュー種類（現在：グラフィックス、プレゼンテーション）
 
 		float queuePriority = 1.0f;    // 優先度；0.0f（低）～1.0f（高）
-		
+
 		for (uint32_t queueFamily : uniqueQueueFamilies)
 		{
 			VkDeviceQueueCreateInfo queueCreateInfo{};
@@ -708,9 +695,7 @@ private:
 		}
 
 		VkPhysicalDeviceFeatures deviceFeatures{};
-		deviceFeatures.samplerAnisotropy = VK_TRUE;    // Anisotropy有効
-		deviceFeatures.sampleRateShading = VK_TRUE;    // サンプルシェーディング有効
-
+		deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 		VkDeviceCreateInfo createInfo{};    // ロジカルデバイス生成情報構造体
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -792,7 +777,7 @@ private:
 		if (indices.graphicsFamily != indices.presentFamily)    // グラフィックスとプレゼンテーションキューが異なる場合
 		{
 			// イメージ共有モードについて： Regarding imageSharingMode
-			
+
 			// VK_SHARING_MODE_EXCLUSIVE （排他的）：1つのイメージが1つのキュー種類しか所属できません
 			// 他のキュー種類に使用すると 所属をはっきり切り替えないといけません。パフォーマンス面で最適
 			// exclusive: image is owned by one queue family at a time;	must be explicitly transferred before use in another queue
@@ -800,13 +785,13 @@ private:
 
 			// VK_SHARING_MODE_CONCURRENT（同時）　：1つのイメージが複数のキュー種類に所属できます
 			// concurrent: can be shared across multiple queue families
-			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
+			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 			createInfo.queueFamilyIndexCount = 2;
 			createInfo.pQueueFamilyIndices = queueFamilyIndices;
 		}
 		else    // グラフィックスとプレゼンテーションキューが同じ（現代のデバイスはこういう風に設定されています）。
 		{
-			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;	
+			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			createInfo.queueFamilyIndexCount = 0;        // 任意 optional
 			createInfo.pQueueFamilyIndices = nullptr;    // 任意 optional
 		}
@@ -831,25 +816,23 @@ private:
 		m_SwapChainExtent = extent;
 	}
 
-	// イメージビュー生成
 	void createImageViews()
 	{
-		m_SwapChainImageViews.resize(m_SwapChainImages.size());    // イメージカウントによってベクトルサイズを変更しますallocate enough size to fit all image views 					
+		m_SwapChainImageViews.resize(m_SwapChainImages.size());    // イメージカウントによってベクトルサイズを変更する allocate enough size to fit all image views 					
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
-			m_SwapChainImageViews[i] = createImageView(m_SwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+			m_SwapChainImageViews[i] = createImageView(m_SwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	}
 
-	// レンダーパス生成
 	void createRenderPass()
 	{
 		VkAttachmentDescription colorAttachment{};           // カラーアタッチメント
-		colorAttachment.format  = m_SwapChainImageFormat;    // SwapChainフォーマットと同じ　format of color attachment = format of swap chain images
-		colorAttachment.samples = m_MSAASamples;             // マルチサンプリングビット数
+		colorAttachment.format = m_SwapChainImageFormat;    // SwapChainフォーマットと同じ　format of color attachment = format of swap chain images
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;     // マルチサンプリングなし
 
-		colorAttachment.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;    // レンダリング前の情報はどうするフラッグ　
-		                                                          // what to do with data before rendering
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;    // レンダリング前の情報はどうするフラッグ　
+																  // what to do with data before rendering
 
 		// VK_ATTACHMENT_LOAD_OP_LOAD       : 既存の情報を保存　Preserve existing contents of attachment
 		// VK_ATTACHMENT_LOAD_OP_CLEAR      : クリアする（現在：黒）Clear the values to a constant at the start (in this case, clear to black)
@@ -860,15 +843,15 @@ private:
 		// VK_ATTACHMENT_STORE_OP_STORE     : 情報を保存　Rendered contents will be stored in memory and can be read later
 		// VK_ATTACHMENT_STORE_OP_DONT_CARE : 情報を無視　Contents of the framebuffer will be undefined ater the rendering operation
 
-		colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;     // ステンシルバッファーを使っていない
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;     // ステンシルバッファーを使っていない
 		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;    // not using stencil buffer
 
-		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;                 // レンダリング前のイメージレイアウト image layout before render pass
-		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;    // レンダリング前のイメージレイアウト layout to automatically transition to after pass
-		
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;        // レンダリング前のイメージレイアウト image layout before render pass
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;    // レンダリング前のイメージレイアウト layout to automatically transition to after pass
+
 		// 一般のレイアウト種 Common Layouts:
 		// VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : カラーアタッチメントとして使う    Images used as color attachment
-		// VK_IMAGE_LAYOUT_PRESENT_SRC_KHR          : SwapChainで描画します              Images to be presented in the swap chain
+		// VK_IMAGE_LAYOUT_PRESENT_SRC_KHR          : SwapChainで描画する               Images to be presented in the swap chain
 		// VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL     : メモリーコピー演算として使う      Images to be used as destination for a memory copy operation
 
 		// アタッチメントレフレックスインデックス
@@ -876,28 +859,10 @@ private:
 		colorAttachmentReference.attachment = 0;    // attachment reference index; 0 = first index (only one attachment for now)
 		colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		// マルチサンプリングで作成したイメージは直接描画できません。普通のイメージとしてまとめてから描画できます
-		// 下記のサブパスパラメータ subpass.pResolveAttachments及び必要な準備で処理します
-		// Multisampled Images cannot be presented directly (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR). 
-		// First resolve them into a regular image, then they can be presented via subpass.pResolveAttachments below
-		VkAttachmentDescription colorAttachmentResolve{};    // カラーアタッチメントResolve(リソールブ；解決）情報構造体
-		colorAttachmentResolve.format = m_SwapChainImageFormat;
-		colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;    // マルチサンプル後、イメージを1ビットサンプルに変換
-		colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;    // リソールブ後、プレゼントすることができます
-
-		VkAttachmentReference colorAttachmentResolveReference{};
-		colorAttachmentResolveReference.attachment = 2;
-		colorAttachmentResolveReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
 		// デプスアタッチメント
 		VkAttachmentDescription depthAttachment{};
 		depthAttachment.format = findDepthFormat();
-		depthAttachment.samples = m_MSAASamples;
+		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -916,7 +881,6 @@ private:
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentReference;
 		subpass.pDepthStencilAttachment = &depthAttachmentReference;
-		subpass.pResolveAttachments = &colorAttachmentResolveReference;
 
 		// サブパス依存関係
 		VkSubpassDependency dependency{};
@@ -929,7 +893,7 @@ private:
 
 		// レンダーパス情報構造体生成
 		// attachments：createCommandBuffers()のclearValues順番と同じにすること
-		std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };    
+		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -955,7 +919,7 @@ private:
 		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uboLayoutBinding.pImmutableSamplers = nullptr;               // 任意 optional, image sampling用
 		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;    // 参照できるシェーダーステージ（現在、頂点シェーダーでスクリプター）		
-                                                                     // 全てのステージの場合、VK_SHADER_STAGE_ALL_GRAPHICS
+																	 // 全てのステージの場合、VK_SHADER_STAGE_ALL_GRAPHICS
 
 		// 合成イメージサンプラー用
 		// Combined Image Sampler
@@ -1060,7 +1024,7 @@ private:
 
 		VkPipelineRasterizationStateCreateInfo rasterizer{};    // ラスタライザー情報構造体
 		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-		rasterizer.depthClampEnable = VK_FALSE;			
+		rasterizer.depthClampEnable = VK_FALSE;
 		// VK_TRUE: ニア―・ファー領域のフラグメントが捨てずに境界にクランプされます。シャドウマッピングに便利。
 		// VK_TRUE: fragments beyond near and far planes are clamped to them rather than discarding them; useful with shadow mapping
 
@@ -1070,15 +1034,15 @@ private:
 		// LINE: ラインで描画（ワイヤーフレーム）　polygon edges drawn as lines (i.e. wireframe)
 		// POINT: 頂点で描画　polygon vertices are drawn as points
 		// ※FILL以外の場合、特定なGPU機能をオンにする必要があります。Using anything other than FILL requires enabling a GPU feature.
-		
+
 		rasterizer.lineWidth = 1.0f;    // ラインの厚さ（ピクセル単位）Line thickness (in pixels)
 		// ※1.0以上の厚さの場合、特定なGPU機能をオンにする必要があります。Using line width greater than 1.0f requires enabling a GPU feature.
 
 		rasterizer.cullMode = VK_CULL_MODE_NONE;                    // カリング設定（通常：BackfaceCulling)
-		                                                            // VK_CULL_MODE_BACK_BIT
+																	// VK_CULL_MODE_BACK_BIT
 
 		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;     // 頂点の順番により表面・裏面を判断する設定（時計回り・反時計回り）
-		                                                            // determines front-facing by vertex order (CLOCKWISE or COUNTER_CLOCKWISE) 
+																	// determines front-facing by vertex order (CLOCKWISE or COUNTER_CLOCKWISE) 
 		rasterizer.depthBiasEnable = VK_FALSE;        // VK_TRUE: Depth値調整（シャドウマッピング）Adjusting depth values i.e. for shadow mapping
 		rasterizer.depthBiasConstantFactor = 0.0f;    // 任意 optional
 		rasterizer.depthBiasClamp = 0.0f;             // 任意 optional
@@ -1089,12 +1053,12 @@ private:
 
 		VkPipelineMultisampleStateCreateInfo multisampling{};    // マルチサンプリング情報構造体
 		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-		multisampling.sampleShadingEnable = VK_TRUE;             // サンプルシェーディング有効
-		multisampling.rasterizationSamples = m_MSAASamples;      // マルチサンプリング有効
-		multisampling.minSampleShading = 0.2f;                   // 1.0に近ければ近いほどスムーズ率が高くなる
-		multisampling.pSampleMask = nullptr;                     // 任意 optional
-		multisampling.alphaToCoverageEnable = VK_FALSE;          // 任意 optional
-		multisampling.alphaToOneEnable = VK_FALSE;               // 任意 optionall
+		multisampling.sampleShadingEnable = VK_FALSE;                   // 無効
+		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;     // 1ビットのみ（無効）
+		multisampling.minSampleShading = 1.0f;              // 任意 optional
+		multisampling.pSampleMask = nullptr;                // 任意 optional
+		multisampling.alphaToCoverageEnable = VK_FALSE;     // 任意 optional
+		multisampling.alphaToOneEnable = VK_FALSE;          // 任意 optionall
 
 		// 6.)　デプス・ステンシル
 		// Depth and Stencil Testing 
@@ -1115,12 +1079,12 @@ private:
 
 		// 7.) カラーブレンディング：①フレームバッファーの既存の色と混ぜるか、②前と新しい値をBitwise演算で合成するか
 		// Color Blending: Either ① mix the old value (in the framebuffer) and new value, or ② perform a bitwise operation with the two values
-			
+
 		VkPipelineColorBlendAttachmentState colorBlendAttachment{};         // カラーブレンド情報構造体
 		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT      // ①のブレンディング方式
-											| VK_COLOR_COMPONENT_G_BIT 
-											| VK_COLOR_COMPONENT_B_BIT 
-											| VK_COLOR_COMPONENT_A_BIT;
+			| VK_COLOR_COMPONENT_G_BIT
+			| VK_COLOR_COMPONENT_B_BIT
+			| VK_COLOR_COMPONENT_A_BIT;
 		colorBlendAttachment.blendEnable = VK_FALSE;                        // 下記のコメント欄をご覧ください。
 		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;     // 任意 optional
 		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;    // 任意 optional
@@ -1154,7 +1118,7 @@ private:
 		//colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 		//colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 		//colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-	
+
 		VkPipelineColorBlendStateCreateInfo colorBlending{};    // パイプラインカラーブレンドステート情報構造体
 		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		colorBlending.logicOpEnable = VK_FALSE;       // VK_TRUE: ②のベンディング方式
@@ -1183,7 +1147,7 @@ private:
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};     // パイプラインレイアウト情報構造体
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 1;               
+		pipelineLayoutInfo.setLayoutCount = 1;
 		pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;     // でスクリプターセットレイアウト
 		pipelineLayoutInfo.pushConstantRangeCount = 0;               // 任意 optional
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;            // 任意 optional
@@ -1211,7 +1175,7 @@ private:
 		pipelineInfo.pViewportState = &viewportState;
 		pipelineInfo.pRasterizationState = &rasterizer;
 		pipelineInfo.pMultisampleState = &multisampling;
-		pipelineInfo.pDepthStencilState = &depthStencil; 
+		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = nullptr;             // 任意 optional
 
@@ -1248,16 +1212,15 @@ private:
 		vkDestroyShaderModule(m_LogicalDevice, vertShaderModule, nullptr);
 	}
 
-	// フレームバッファー
-	void createFramebuffers()	
+	void createFramebuffers()
 	{
 		m_SwapChainFramebuffers.resize(m_SwapChainImageViews.size());
 
 		for (size_t i = 0; i < m_SwapChainImageViews.size(); i++)
 		{
-			std::array<VkImageView, 3> attachments = 
+			std::array<VkImageView, 2> attachments =
 			{
-				m_ColorImageView, m_DepthImageView, m_SwapChainImageViews[i]
+				m_SwapChainImageViews[i], m_DepthImageView
 			};
 
 			VkFramebufferCreateInfo framebufferInfo{};
@@ -1284,7 +1247,7 @@ private:
 		VkCommandPoolCreateInfo poolInfo{};    // コマンドプール情報構造体
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();    // 描画するためグラフィックスキューを選択します
-		                                                                          // drawing commands: graphics queue family chosen
+																				  // drawing commands: graphics queue family chosen
 		poolInfo.flags = 0;    // optional 任意
 
 		// 上記の構造体の情報に基づいて実際のコマンドプールを生成します。
@@ -1293,16 +1256,12 @@ private:
 			throw std::runtime_error("Failed to create graphics command pool!");
 		}
 	}
-	
-	// デプスリソース生成
+
 	void createDepthResources()
 	{
 		VkFormat depthFormat = findDepthFormat();
 		createImage(
-			m_SwapChainExtent.width, 
-			m_SwapChainExtent.height,
-			1,
-			m_MSAASamples,
+			m_SwapChainExtent.width, m_SwapChainExtent.height,
 			depthFormat,
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1310,7 +1269,7 @@ private:
 			m_DepthImage,
 			m_DepthImageMemory
 		);
-		m_DepthImageView = createImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+		m_DepthImageView = createImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	// サポートされている（適用できる）一番理想なフォーマットを検索します（TilingとFeaturesによって異なります）
@@ -1343,29 +1302,31 @@ private:
 		);
 	}
 
-	// 渡されたデプスフォーマットがステンシルコンポーネントがついているか
+	// 渡したデプスフォーマットがステンシルコンポーネントがついているか
 	bool hasStencilComponent(VkFormat format)
 	{
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
 	// イメージ（画像）生成
-	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+	void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
 	{
+
 		VkImageCreateInfo imageInfo{};
 		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageInfo.imageType = VK_IMAGE_TYPE_2D;
 		imageInfo.extent.width = width;
 		imageInfo.extent.height = height;
 		imageInfo.extent.depth = 1;
-		imageInfo.mipLevels = mipLevels;
+		imageInfo.mipLevels = 1;
 		imageInfo.arrayLayers = 1;
 		imageInfo.format = format;
 		imageInfo.tiling = tiling;
 		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		imageInfo.usage = usage;
-		imageInfo.samples = numSamples;
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;  // マルチサンプリング用
+		imageInfo.flags = 0;  // 任意 optional
 
 		if (vkCreateImage(m_LogicalDevice, &imageInfo, nullptr, &image) != VK_SUCCESS)
 		{
@@ -1388,8 +1349,8 @@ private:
 		vkBindImageMemory(m_LogicalDevice, image, imageMemory, 0);
 	}
 
-	// イメージビュー生成
-	VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels)
+	// helper function
+	VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 	{
 		VkImageViewCreateInfo viewInfo{};
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1399,7 +1360,7 @@ private:
 
 		viewInfo.subresourceRange.aspectMask = aspectFlags;
 		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = mipLevels;
+		viewInfo.subresourceRange.levelCount = 1;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
 		viewInfo.subresourceRange.layerCount = 1;
 
@@ -1416,16 +1377,10 @@ private:
 	void createTextureImage()
 	{
 		int texWidth, texHeight, texChannels;
-		
+
 		// STBI_rgb_alpha: αチャネルがない場合、自動的に追加します。
 		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-		// max   : widthとheightから大きいサイズの方を基準に
-		// log2  : その値を何回まで2で除算できるか（各ミップマップレベルは元のレベルの半分のため）
-		// floor : max値 % 2 != 0　の場合、floorに超えない最大整数として扱います
-		// +1    : 元のテクスチャー自体をレベル0とします(ループ処理は[i] -1)
-		m_MipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
 		if (!pixels)
 		{
@@ -1455,22 +1410,20 @@ private:
 		createImage(
 			texWidth,
 			texHeight,
-			m_MipLevels,
-			VK_SAMPLE_COUNT_1_BIT,
 			VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			m_TextureImage,
 			m_TextureImageMemory
 		);
 
+		// イメージレイアウトをVK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMALに設定
 		transitionImageLayout(
 			m_TextureImage,
 			VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			m_MipLevels);
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		// コピー処理を実行
 		copyBufferToImage(
@@ -1480,145 +1433,35 @@ private:
 			static_cast<uint32_t>(texHeight)
 		);
 
+		// テクスチャー使用のシェーダー許可の準備
+		transitionImageLayout(
+			m_TextureImage,
+			VK_FORMAT_R8G8B8A8_SRGB,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		);
+
 		// 後片付け
 		vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
 		vkFreeMemory(m_LogicalDevice, stagingBufferMemory, nullptr);
-
-		// ミップマップ生成
-		generateMipmaps(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, m_MipLevels);
 	}
 
-	// ミップマップ生成関数
-	void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
-	{
-		// 渡されたフォーマットがLinear Blittingをサポートするかを確認
-		VkFormatProperties formatProperties;
-		vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, imageFormat, &formatProperties);
-		
-		if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-		{
-			throw std::runtime_error("Texture image format does not support linear blitting!");
-		}
-
-
-		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
-
-		VkImageMemoryBarrier barrier{};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.image = image;
-		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = 1;
-		barrier.subresourceRange.levelCount = 1;
-
-		int32_t mipWidth = texWidth;
-		int32_t mipHeight = texHeight;
-
-		// ミップマップ生成ループ
-		for (uint32_t i = 1; i < mipLevels; i++)    // ループは1から始めるのは注意点
-		{
-			barrier.subresourceRange.baseMipLevel = i - 1;
-			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;    // Optimal: クオリティー最適化
-			barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-			vkCmdPipelineBarrier(
-				commandBuffer,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				0,
-				0, nullptr,
-				0, nullptr,
-				1, &barrier);
-
-			// 画像からミップマップを生成する専用情報構造体
-			VkImageBlit blit{};                                // blit: Bit Block Transfer
-			blit.srcOffsets[0] = { 0, 0, 0 };                  // blit元のオフセット（範囲） Source Offset
-			blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
-			blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			blit.srcSubresource.mipLevel = i - 1;
-			blit.srcSubresource.baseArrayLayer = 0;
-			blit.srcSubresource.layerCount = 1;
-
-			// blit先のオフセット（領域） Destination Offset
-			blit.dstOffsets[0] = { 0, 0, 0 };
-			blit.dstOffsets[1] = {
-					mipWidth > 1 ? mipWidth / 2 : 1,     // 条件演算子でのミップマップ計算
-					mipHeight > 1 ? mipHeight / 2 : 1,     // conditional/tertiary operator mipmap calculation
-					1
-			};
-			blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			blit.dstSubresource.mipLevel = i;
-			blit.dstSubresource.baseArrayLayer = 0;
-			blit.dstSubresource.layerCount = 1;
-
-			vkCmdBlitImage(
-				commandBuffer,
-				image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				1, &blit,
-				VK_FILTER_LINEAR    // 補間
-			);
-
-			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-			barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-			vkCmdPipelineBarrier(
-				commandBuffer,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-				0,
-				0, nullptr,
-				0, nullptr,
-				1, &barrier);
-
-			// ミップマップ生成後、ミップマップサイズ / 2（ゼロ除算を避けるため、値は1をチェック）
-			// テクスチャーの縦と横が一等しない場合、どちらかが先に1のままになります
-			if (mipWidth > 1) mipWidth /= 2;
-			if (mipHeight > 1) mipHeight /= 2;
-		}
-
-		// 最後のミップマップレベルをVK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMALからVK_IMAGE_SHADER_READ_ONLY_OPTIMALに
-		// (最後のレベルはループに入らなかったため）
-		barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-		vkCmdPipelineBarrier(
-			commandBuffer,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			0,
-			0, nullptr,
-			0, nullptr,
-			1, &barrier);
-
-		endSingleTimeCommands(commandBuffer);
-	}
-
-	// createTextureImage()からのイメージがイメージビューを生成
+	// createTextureImage()の画像をアクセスするイメージビューを生成
 	void createTextureImageView()
 	{
-		m_TextureImageView = createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, m_MipLevels);
+		m_TextureImageView = createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 	}
 
-	// テクスチャーサンプラー生成：Filtering (Bilinear, Anisotropicなど)、AddressingModeなど
+	// Filtering (Bilinear, Anisotropicなど)、AddressingModeなどのテクスチャーサンプラー生成
 	void createTextureSampler()
 	{
 		VkSamplerCreateInfo samplerInfo{};    // サンプラー情報構造体
 		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		
+
 		// バイリニアフィルタリング (他はVL_FILTER_NEAREST)
 		samplerInfo.magFilter = VK_FILTER_LINEAR;
 		samplerInfo.minFilter = VK_FILTER_LINEAR;
-		
+
 		// UVW = XYZ; テクスチャー座標でよく使われています
 		// UVW often used in Texture Space Coordinates
 		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -1632,7 +1475,6 @@ private:
 		// VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER: returns solid color when sampling beyond dimensions
 		// ※現在、イメージの外でサンプリングを行わないため設定を無視しますが、一番よく使われているのはMODE_REPEATです
 
-
 		VkPhysicalDeviceProperties properties{};
 		vkGetPhysicalDeviceProperties(m_PhysicalDevice, &properties);
 
@@ -1641,7 +1483,7 @@ private:
 
 		// CLAMP_TO_BORDERの場合、表示されたカラー 
 		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-		
+
 		// Texel座標 [0, 1)
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
@@ -1652,61 +1494,14 @@ private:
 		// ミップマッピング用
 		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 		samplerInfo.mipLodBias = 0.0f;
-		// samplerInfo.minLod = static_cast<float>(m_MipLevels / 2);      // ミップマップテスト
 		samplerInfo.minLod = 0.0f;
-		samplerInfo.maxLod = static_cast<float>(m_MipLevels);
+		samplerInfo.maxLod = 0.0f;
 
 		if (vkCreateSampler(m_LogicalDevice, &samplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create texture sampler!");
 		}
-	}
 
-	// 使用中のGPUの対応できるサンプルビット数を獲得する関数
-	VkSampleCountFlagBits getMaxUseableSampleCount()
-	{
-		VkPhysicalDeviceProperties physicalDeviceProperties;
-		vkGetPhysicalDeviceProperties(m_PhysicalDevice, &physicalDeviceProperties);
-
-		VkSampleCountFlags counts = 
-			physicalDeviceProperties.limits.framebufferColorSampleCounts 
-			& physicalDeviceProperties.limits.framebufferDepthSampleCounts;
-
-
-		// 最大数優先
-		if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
-		if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
-		if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
-		if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }    // 現在のGPU: NVIDIA GeForce RTX 2070 SUPER
-		if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
-		if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
-
-		return VK_SAMPLE_COUNT_1_BIT;
-	}
-
-	// マルチサンプリング用カラーバッファーを生成
-	void createColorResources()
-	{
-		VkFormat colorFormat = m_SwapChainImageFormat;
-
-		createImage(
-			m_SwapChainExtent.width,
-			m_SwapChainExtent.height,
-			1,
-			m_MSAASamples,
-			colorFormat,
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			m_ColorImage,
-			m_ColorImageMemory
-		);
-		
-		// マルチサンプリング用イメージビュー生成の際にミップマップは「1」に設定しないといけません（Vulkanの決まり）
-		// このイメージビューはテクスチャーとして使わないので描画品質に影響しません
-		// Mipmap levels must be set to 1 when creating an image with more than one sample per pixel,
-		// as per Vulkan specifications.  As this image will not be used as a texture, it will not affect quality
-		m_ColorImageView = createImageView(m_ColorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 
 	// バッファー情報をイメージに移す
@@ -1733,15 +1528,14 @@ private:
 			buffer,
 			image,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			1, 
+			1,
 			&region
 		);
 
 		endSingleTimeCommands(commandBuffer);
 	}
 
-	// イメージレイアウトを次のレイアウトに遷移します
-	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
+	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 	{
 		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
@@ -1758,7 +1552,7 @@ private:
 		barrier.image = image;
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = mipLevels;
+		barrier.subresourceRange.levelCount = 1;
 		barrier.subresourceRange.baseArrayLayer = 0;
 		barrier.subresourceRange.layerCount = 1;
 
@@ -1833,7 +1627,6 @@ private:
 		vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, 1, &commandBuffer);
 	}
 
-	// モデルのロード処理
 	void loadModel()
 	{
 		tinyobj::attrib_t attrib;
@@ -1882,8 +1675,7 @@ private:
 				//m_Indices.push_back(m_Indices.size());
 			}
 		}
-		// 頂点数確認・比較
-		// std::cout << "頂点数: "  << m_Vertices.size() << std::endl;
+		std::cout << "頂点数: " << m_Vertices.size() << std::endl;
 	}
 
 	// 頂点バッファー生成
@@ -1897,19 +1689,19 @@ private:
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
 		createBuffer(
-			bufferSize, 
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-			stagingBuffer, 
+			bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			stagingBuffer,
 			stagingBufferMemory);
 
 		void* data;	// voidポインター；今回メモリーマップに使用します
-		
+
 		// 情報をメモリーにマップ
 		vkMapMemory(m_LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-			memcpy(data, m_Vertices.data(), (size_t)bufferSize);
+		memcpy(data, m_Vertices.data(), (size_t)bufferSize);
 		vkUnmapMemory(m_LogicalDevice, stagingBufferMemory);
-		
+
 		// 頂点バッファーを生成します
 		createBuffer(
 			bufferSize,
@@ -1942,7 +1734,7 @@ private:
 			stagingBuffer,
 			stagingBufferMemory);
 
-		void* data;	
+		void* data;
 		vkMapMemory(m_LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
 		memcpy(data, m_Indices.data(), (size_t)bufferSize);        // 変更点　③ vertices.data() --> indices.data()
 		vkUnmapMemory(m_LogicalDevice, stagingBufferMemory);
@@ -1963,7 +1755,7 @@ private:
 		vkFreeMemory(m_LogicalDevice, stagingBufferMemory, nullptr);
 	}
 
-	// ユニフォームバッファー：シェーダー用のUBO(Uniform Buffer Object)データ
+	// ユニフォームバッファー：シェーダー用のUBOデータ
 	void createUniformBuffers()
 	{
 		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -1984,8 +1776,8 @@ private:
 		}
 	}
 
-	// デスクリプターセット（トランスフォーム情報、など）を直接生成できません。
-	// コマンドバッファーのコマンドプールと同じように、まずはデスクリプタープールを生成する必要があります
+	// でスクリプターセットを直接生成できません。コマンドバッファーのコマンドプールと同じように、まずは
+	// でスクリプタープールを生成する必要があります
 	void createDescriptorPool()
 	{
 		std::array<VkDescriptorPoolSize, 2> poolSizes{};    // 各フレームに1つのデスクリプターを用意します
@@ -2111,7 +1903,6 @@ private:
 		endSingleTimeCommands(commandBuffer);
 	}
 
-	// 適切なメモリータイプを検索
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
 	{
 		VkPhysicalDeviceMemoryProperties memProperties;    // メモリータイプ、メモリーヒープ
@@ -2136,8 +1927,8 @@ private:
 
 		VkCommandBufferAllocateInfo allocInfo{};                    // メモリー割り当て情報構造体
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = m_CommandPool;		
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;					
+		allocInfo.commandPool = m_CommandPool;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		// PRIMARY:	キューに直接渡せますが、他のコマンドバッファーから呼び出せません。
 		// can be submitted to queue for execution, but cannot be called from other command buffers
 		// SECONDARY:　キューに直接渡せませんが、プライマリーコマンドバッファーから呼び出せます。
@@ -2156,7 +1947,7 @@ private:
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 			beginInfo.flags = 0;                        // 任意　optional
 			beginInfo.pInheritanceInfo = nullptr;       // 継承：SECONDARYの場合のみ（どのコマンドバッファーから呼び出すか）
-			                                            // only for secondary command buffers (which state to inherit from)
+														// only for secondary command buffers (which state to inherit from)
 
 			if (vkBeginCommandBuffer(m_CommandBuffers[i], &beginInfo) != VK_SUCCESS)
 			{
@@ -2174,18 +1965,18 @@ private:
 
 			// パフォーマンスの最適化のため、レンダー領域をアタッチメントサイズに合わせます。
 			// match render area to size of attachments for best performance
-			renderPassInfo.renderArea.extent = m_SwapChainExtent;	
+			renderPassInfo.renderArea.extent = m_SwapChainExtent;
 
 			// createRenderPass(): VK_ATTACHMENT_LOAD_OP_CLEARのクリア値 (clearColor)
-			std::array<VkClearValue, 2> clearValues{};    
+			std::array<VkClearValue, 2> clearValues{};
 			clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };    // 黒
 			clearValues[1].depthStencil = { 1.0f, 0 };            // デプスステンシルクリア値 (1.0f: ファー Far Plane)
 
-			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());                   
+			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			renderPassInfo.pClearValues = clearValues.data();
 
 			// 実際のレンダーパスを開始します
-			vkCmdBeginRenderPass(m_CommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);	
+			vkCmdBeginRenderPass(m_CommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			// グラフィックスパイプラインとつなぎます
 			vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
@@ -2255,30 +2046,28 @@ private:
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
 			if (vkCreateSemaphore(m_LogicalDevice, &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS
-			 || vkCreateSemaphore(m_LogicalDevice, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS
-			 || vkCreateFence(m_LogicalDevice, &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+				|| vkCreateSemaphore(m_LogicalDevice, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS
+				|| vkCreateFence(m_LogicalDevice, &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
 			{
 				throw std::runtime_error("Failed to create synchronization objects for a frame!");
 			}
 		}
 	}
 
-	// ユニフォームバッファー更新（UBO）：マトリックストランスフォーム、カメラ設定
 	void updateUniformBuffer(uint32_t currentImage)
 	{
 		//// startTime、currentTimeの実際のデータ型: static std::chrono::time_point<std::chrono::steady_clock> 
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-		
+
 		UniformBufferObject ubo{};  // MVPトランスフォーム情報構造体
 
-		//// M(Model: 毎フレーム、Z軸にX°回転させる
-		// ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));   
+		//// M(Model: 毎フレーム、Z軸に90°回転させる
+		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		//
-		// V(View): 引数　eye位置, center位置, up軸
-		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		// V(View): 引数　eye位置, center位置, up軸　（現在上から45°）
+		ubo.view = glm::lookAt(glm::vec3(0.3f, 0.3f, 0.5f), glm::vec3(-0.4f, -0.1f, 0.1f), glm::vec3(0.0f, 0.0f, 1.0f));
 
 		// P(Projection): 引数　45°バーティカルFoV, アスペクト比、ニア、ファービュープレーン
 		// arguments: field-of-view, aspect ratio, near and far view planes 
@@ -2299,7 +2088,7 @@ private:
 		vkUnmapMemory(m_LogicalDevice, m_UniformBuffersMemory[currentImage]);
 	}
 
-	// フレームを描画
+	// 描画関数
 	void drawFrame()
 	{
 		// フェンス処理を待ちます
@@ -2360,7 +2149,7 @@ private:
 		VkPresentInfoKHR presentInfo{};    // プレゼント情報構造体
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
-		presentInfo.waitSemaphoreCount = 1;	
+		presentInfo.waitSemaphoreCount = 1;
 		presentInfo.pWaitSemaphores = signalSemaphores;
 
 		VkSwapchainKHR swapChains[] = { m_SwapChain };      // SwapChain構造体
@@ -2370,14 +2159,14 @@ private:
 
 		// 任意（複数のSwapChainの場合、各SwapChainの結果を格納する配列）
 		// array of VkResult values to check for each swap chain if presentation was successful if using multiple swap chains
-		presentInfo.pResults = nullptr;		
-											
+		presentInfo.pResults = nullptr;
+
 		// リザルトをSwapChainに渡して描画します  submit the result back to the swap chain to have it show on screen
 		result = vkQueuePresentKHR(m_PresentQueue, &presentInfo);
 
 		if (result == VK_ERROR_OUT_OF_DATE_KHR    // SwapChainが廃れた
-		 || result == VK_SUBOPTIMAL_KHR           // SwapChainが最適化されていない
-		 || m_FramebufferResized == true)         // フレームバッファーのサイズが変更された
+			|| result == VK_SUBOPTIMAL_KHR           // SwapChainが最適化されていない
+			|| m_FramebufferResized == true)         // フレームバッファーのサイズが変更された
 		{
 			m_FramebufferResized = false;
 			recreateSwapChain();                  // SwapChainを再生成します
@@ -2391,19 +2180,19 @@ private:
 	}
 
 	// シェーダーコードをパイプラインに使用する際にシェーダーモジュールにwrapする必要があります。
-	VkShaderModule createShaderModule(const std::vector<char>& code)	
-	{	
+	VkShaderModule createShaderModule(const std::vector<char>& code)
+	{
 		// specify a pointer to the buffer with the bytecode and length
 
 		VkShaderModuleCreateInfo createInfo{};    // シェーダーモジュール情報構造体
-		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;		
+		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		createInfo.codeSize = code.size();        // サイズ
 
 		// バイトコードのサイズはバイトで表しますが、バイトコードポインターはuint32_t型です。
 		// そこで、ポインターをrecastする必要があります。
 		// size of bytecode is in bytes, but bytecode pointer is uint32_t pointer rather than a char pointer.
 		// thus, we need to recast the pointer as below.
-		createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());	
+		createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
 		// 上記の構造体に基づいてシェーダーモジューを生成します。
 		VkShaderModule shaderModule;
@@ -2420,17 +2209,17 @@ private:
 		for (const VkSurfaceFormatKHR& availableFormat : availableFormats)
 		{
 			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB    // sRGBが使えるなら洗濯します。
-				&& availableFormat.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR)	 
+				&& availableFormat.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR)
 			{
 				return availableFormat;
 			}
 		}
 		// それ以外、最初見つかったフォーマットを使ってもいいです otherwise, just use the first format that is specified
-		return  availableFormats[0];	
-										
+		return  availableFormats[0];
+
 	}
 
-	// スワッププレゼントモードを選択
+	// スワッププレゼントモード
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
 	{
 		for (const VkPresentModeKHR& availablePresentMode : availablePresentModes)
@@ -2499,7 +2288,7 @@ private:
 		if (presentModeCount != 0)
 		{
 			// 適用できるプレゼンテーションモードを格納できるようにリサイズします。
-			details.presentModes.resize(presentModeCount);    
+			details.presentModes.resize(presentModeCount);
 			vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_Surface, &presentModeCount, details.presentModes.data());    // データを代入
 		}
 		return details;
@@ -2513,7 +2302,7 @@ private:
 		bool extensionsSupported = checkDeviceExtensionSupport(device);
 
 		bool swapChainAdequate = false;     // 最低限1つのイメージフォーマットと1つのプレゼンテーションモードが特定できましたか
-		                                    // At least one supported image format and one supported presentation mode given the window surface
+											// At least one supported image format and one supported presentation mode given the window surface
 		if (extensionsSupported)
 		{
 			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
@@ -2545,14 +2334,14 @@ private:
 		for (const VkExtensionProperties& extension : availableExtensions)
 		{
 			requiredExtensions.erase(extension.extensionName);    // 必要なエクステンションを見つかった場合、setから削除します。
-			                                                      // erase if required extension is in the vector
+																  // erase if required extension is in the vector
 		}
-		
+
 		bool isEmpty = requiredExtensions.empty();    // 全ての必要なエクステンションが見つかった場合、True	
 		return isEmpty;                               // if all the required extension were present (and thus erased), returns true
 	}
 
-	// キュー種類検索・選択
+	// キュー種類選択
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
 	{
 		QueueFamilyIndices indices;
@@ -2574,7 +2363,7 @@ private:
 			VkBool32 presentSupport = false;
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_Surface, &presentSupport);
 
-			if (presentSupport = VK_TRUE)		
+			if (presentSupport = VK_TRUE)
 			{
 				indices.presentFamily = i;
 			}
@@ -2590,7 +2379,7 @@ private:
 
 	// 必要なエクステンションの一覧（デバッグ機能がオン・オフによって異なります）
 	// returns the list of extensions based on whether validation layers are enabled or not
-	std::vector<const char*> getRequiredExtensions()	
+	std::vector<const char*> getRequiredExtensions()
 	{
 		uint32_t glfwExtensionCount = 0;
 		const char** glfwExtensions;
@@ -2606,7 +2395,7 @@ private:
 	}
 
 	// バリデーションレイヤーがサポートされているかの確認
-	bool checkValidationLayerSupport()		
+	bool checkValidationLayerSupport()
 	{
 		uint32_t layerCount;
 		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);                   // バリデーションレイヤー数を特定
@@ -2621,7 +2410,7 @@ private:
 			for (const VkLayerProperties& layerProperties : availableLayers)
 			{
 				// レイヤー名が既存のバリデーションレイヤーに合ってる場合 if layer name matches existing validation layer name
-				if (strcmp(layerName, layerProperties.layerName) == 0)						
+				if (strcmp(layerName, layerProperties.layerName) == 0)
 				{
 					layerFound = true;		// 見つかったフラッグ
 					break;
@@ -2630,8 +2419,8 @@ private:
 
 			// 今までのレイヤーが既存のレイヤーリストに見つかった限り、全てのレイヤーが確認するまでループが続きます
 			// as long as layer is found in the list, loop will continue until all validation layers have been verified
-			if (layerFound == false)        
-			{							
+			if (layerFound == false)
+			{
 				return false;
 			}
 		}
@@ -2651,11 +2440,11 @@ private:
 
 		size_t fileSize = (size_t)file.tellg();     // telg(): インプットストリーム位置を戻す returns input stream position. 
 		std::vector<char> buffer(fileSize);         // 尻尾(EOF: End of File) から読み込むと実際のファイルサイズを特定できます。
-		                                            // EOF essentially gives us the size of the file for the buffer
+													// EOF essentially gives us the size of the file for the buffer
 
 		file.seekg(0);                              // ファイルの頭に戻る　return to beginning of file
 		file.read(buffer.data(), fileSize);         // read(x, y): yまで読み込み、xバッファーにアサインします 
-		                                            // read up to count y and assign to buffer x
+													// read up to count y and assign to buffer x
 
 		// 今回、全てのバイトを一気に読み込む in this case, read all the bytes at once
 
