@@ -1589,7 +1589,7 @@ private:
 		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 		vkCmdPipelineBarrier(
 			commandBuffer,
@@ -1652,7 +1652,7 @@ private:
 		// ミップマッピング用
 		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 		samplerInfo.mipLodBias = 0.0f;
-		// samplerInfo.minLod = static_cast<float>(m_MipLevels / 2);      // ミップマップテスト
+		// samplerInfo.minLod = static_cast<float>(m_MipLevels / 2);      // ミップマップテスト mipmap test
 		samplerInfo.minLod = 0.0f;
 		samplerInfo.maxLod = static_cast<float>(m_MipLevels);
 
